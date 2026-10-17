@@ -1,3 +1,4 @@
+import { t } from './i18n';
 // The docked sidebar's resize separator, in the gutter between the panes.
 // States and orderings: verification/CHECKLIST.md, "Sidebar resize" (rows R1–R10,
 // R13 cited below). A drag previews by writing `--sidebar-w` on the shell
@@ -95,7 +96,7 @@ export function SidebarResizer({
     const current = drag.current;
     if (!current || event.pointerId !== current.pointerId) return;
     // R3, R13: measured from the press, so leaving a bound and coming back follows the pointer.
-    const next = clampSidebarWidth(current.startWidth + event.clientX - current.startX);
+    const next = clampSidebarWidth(current.startWidth + (document.documentElement.dir === 'rtl' ? -1 : 1) * (event.clientX - current.startX));
     if (next === current.preview) return;
     current.preview = next;
     preview(next);
@@ -115,9 +116,9 @@ export function SidebarResizer({
     }
     const next =
       event.key === 'ArrowLeft'
-        ? width - SIDEBAR_WIDTH.step
+        ? width + (document.documentElement.dir === 'rtl' ? 1 : -1) * SIDEBAR_WIDTH.step
         : event.key === 'ArrowRight'
-          ? width + SIDEBAR_WIDTH.step
+          ? width + (document.documentElement.dir === 'rtl' ? -1 : 1) * SIDEBAR_WIDTH.step
           : event.key === 'Home'
             ? SIDEBAR_WIDTH.min
             : event.key === 'End'
@@ -135,13 +136,13 @@ export function SidebarResizer({
       role="separator"
       aria-orientation="vertical"
       aria-controls="sidebar"
-      aria-label="Resize sidebar"
+      aria-label={t("Resize sidebar")}
       aria-valuemin={SIDEBAR_WIDTH.min}
       aria-valuemax={SIDEBAR_WIDTH.max}
       aria-valuenow={width}
       aria-valuetext={valueText(width)}
       tabIndex={0}
-      title="Drag to resize · double-click to reset"
+      title={t("Drag to resize · double-click to reset")}
       data-sidebar-resizer=""
       onPointerEnter={glow}
       onPointerLeave={onPointerLeave}

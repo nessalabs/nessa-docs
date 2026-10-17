@@ -29,8 +29,10 @@ function footerFacts(page) {
     const controls = footer ? [...footer.querySelectorAll('a, button, [role="button"]')] : [];
     return {
       exists: Boolean(footer),
-      controls: controls.length,
-      text: footer?.innerText.trim() ?? null,
+      controls: footer?.querySelectorAll('a.settings-link').length ?? 0,
+      languageControls: footer?.querySelectorAll('button.language-switch').length ?? 0,
+      totalControls: controls.length,
+      text: footer?.querySelector('a.settings-link')?.textContent.trim() ?? null,
       href: footer?.querySelector('a.settings-link')?.getAttribute('href') ?? null,
       hasIcon: Boolean(footer?.querySelector('a.settings-link')?.querySelector('svg')),
       current: footer?.querySelector('a.settings-link')?.getAttribute('aria-current') ?? null,
@@ -99,13 +101,13 @@ export async function runSettings(engine, scope = 'fixture') {
       await page.locator(S.treeLinks).first().waitFor();
       const footer = await footerFacts(page);
       facts.footer = footer;
-      c.check('footer: one Settings link with a gear', footer.controls === 1 && footer.text === 'Settings' && new URL(footer.href, BASE_URL).pathname === '/settings' && footer.hasIcon, footer);
+      c.check('footer: one Settings link with a gear', footer.controls === 1 && footer.languageControls === 1 && footer.totalControls === 2 && footer.text === 'Settings' && new URL(footer.href, BASE_URL).pathname === '/settings' && footer.hasIcon, footer);
       c.check('footer: no issue count, warnings label, theme or reload buttons anywhere', footer.leftovers === 0 && !/\d|warning|error|problem/i.test(footer.text), footer);
       await page.locator(S.settingsLink).click();
       await page.locator(S.settingsPage).waitFor();
       const general = await tabFacts(page);
       c.check('Settings link opens /settings on General', general.path === '/settings' && general.selected === 'general' && general.panelHas.theme && general.panelLabelledBy === general.selectedId, general);
-      c.check('Settings: link marked current, document title, focus on the heading', (await footerFacts(page)).current === 'page' && (await page.title()) === 'Settings · Nessa Docs' && (await activeElement(page))?.tag === 'h1');
+      c.check('Settings: link marked current, document title, focus on the heading', (await footerFacts(page)).current === 'page' && (await page.title()) === `Settings · ${await page.locator('.brand').getAttribute('aria-label')}` && (await activeElement(page))?.tag === 'h1');
       await page.locator(S.settingsTab('health')).click();
       await page.locator(S.health).waitFor();
       const health = await tabFacts(page);

@@ -17,7 +17,10 @@
     "dev:api": "tsc -p tsconfig.server.json && node dist/server/server/main.js",
     "dev:client": "vite",
     "verify:browser": "node verification/run-all.mjs",
-    "validate:docs": "npm run build:server --silent && node dist/server/server/project-opening/validate-cli.js"
+    "validate:docs": "npm run build:server --silent && node dist/server/server/project-opening/validate-cli.js",
+    "verify:arabic": "node verification/arabic.mjs",
+    "verify:review-flows": "node verification/review-flows.mjs",
+    "verify:details-direction": "node verification/details-direction.mjs"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",

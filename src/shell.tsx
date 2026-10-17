@@ -1,3 +1,5 @@
+import { ProjectBrand } from './project-brand';
+import { t } from './i18n';
 // The window's top-left corner (the sidebar toggle and the nessaDocs name),
 // and the titlebar every page draws at the top of the reading pane: Back and
 // Forward, where you are, and the page's own actions.
@@ -21,7 +23,7 @@ export const AppBar = forwardRef<
     <div className="app-bar">
       <IconButton
         ref={toggleRef}
-        label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+        label={sidebarOpen ? t('Hide sidebar') : t('Show sidebar')}
         aria-expanded={sidebarOpen}
         aria-controls="sidebar"
         data-sidebar-toggle=""
@@ -29,10 +31,7 @@ export const AppBar = forwardRef<
       >
         <PanelLeft />
       </IconButton>
-      <AppLink to="/" className="brand" aria-label="Nessa Docs" title="System overview" onClick={onHome}>
-        <span className="brand-name">nessa</span>
-        <span className="brand-product">Docs</span>
-      </AppLink>
+      <ProjectBrand title={t("System overview")} onHome={onHome} />
     </div>
   );
 });
@@ -57,7 +56,7 @@ export function Titlebar({
     <header className="titlebar">
       <div className="titlebar-controls">
         <IconButton
-          label="Back"
+          label={t("Back")}
           data-history="back"
           aria-disabled={canGoBack ? undefined : true}
           onClick={() => canGoBack && window.history.back()}
@@ -65,7 +64,7 @@ export function Titlebar({
           <ChevronLeft />
         </IconButton>
         <IconButton
-          label="Forward"
+          label={t("Forward")}
           data-history="forward"
           aria-disabled={canGoForward ? undefined : true}
           onClick={() => canGoForward && window.history.forward()}
@@ -73,7 +72,7 @@ export function Titlebar({
           <ChevronRight />
         </IconButton>
       </div>
-      <nav aria-label="Breadcrumb" className="breadcrumbs">
+      <nav aria-label={t("Breadcrumb")} className="breadcrumbs">
         <ol>
           {(trail ?? []).map((crumb) => (
             <li key={crumb.id}>

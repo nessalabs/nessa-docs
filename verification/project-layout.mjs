@@ -22,7 +22,12 @@ export async function runProjectLayout(engine) {
           });
           c.check(`${width} ${state}: Settings-only footer anchored at sidebar bottom`, Math.abs(facts.sidebarBottom-facts.footerBottom) <= 2 && facts.footerHeight > 0 && facts.links.length === 1 && facts.links[0] === 'Settings' && facts.overflow === 0, facts);
           await page.screenshot({ path: join(SCREENSHOTS, `${engine}-project-layout-${width}-${state}.png`) });
-          if (width < 900) await page.keyboard.press('Escape');
+          if (width < 900) {
+            await page.keyboard.press('Escape');
+            await page.waitForFunction(() => document.getElementById('sidebar')?.dataset.open === 'false');
+            c.check(`${width} ${state}: one Escape closes the drawer and restores toggle focus`,
+              await page.locator(S.menuButton).evaluate(el => el === document.activeElement));
+          }
         }
         c.check(`${width}: no page errors`, errors.page.length === 0, errors.page);
       } finally { await context.close(); }

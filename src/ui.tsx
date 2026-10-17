@@ -1,3 +1,4 @@
+import { t } from './i18n';
 // The Nessa UI components this site uses, from the vendored Nessa UI subset
 // (see THIRD_PARTY_NOTICES.md), with the app-local defaults this browser needs.
 
@@ -53,7 +54,7 @@ const STATUS_TEXT: Record<DocumentStatus, string> = {
 export function DocumentStatusLabel({ status, ...props }: { status: DocumentStatus } & Omit<ComponentProps<'span'>, 'children'>) {
   return (
     <StatusLabel tone={STATUS_TONE[status]} data-status={status} {...props}>
-      {STATUS_TEXT[status]}
+      {t(STATUS_TEXT[status])}
     </StatusLabel>
   );
 }

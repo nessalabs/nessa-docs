@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches:
+      - main
+      - feat/arabic-rtl
+      - feat/compact-outline
+      - feat/project-docs-identity
+      - feat/inspector-header-layout
+      - test/combined-reader-prs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CI: true
+
+jobs:
+  checks:
+    name: Build, types and unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  browser:
+    name: Browser tests (Chromium and WebKit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Install locked Playwright browsers and Linux libraries
+        run: npx --no-install playwright install --with-deps chromium webkit
+      - run: npm run build
+      - name: Check fragment layout in WebKit
+        run: node verification/hash-layout.mjs
+      - name: Upload fragment diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fragment-layout-${{ github.run_id }}-${{ github.run_attempt }}
+          path: verification/results/hash/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Original browser suites in Chromium and WebKit
+        run: |
+          mkdir -p verification/results
+          npm run verify:browser 2>&1 | tee verification/results/browser.log
+      - name: Focused PR checks in Chromium
+        if: ${{ !cancelled() }}
+        run: node verification/ci-features.mjs
+      - name: Upload browser results and screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: verification/results/
+          if-no-files-found: ignore
+          retention-days: 7

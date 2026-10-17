@@ -1,3 +1,5 @@
+import { t, useLanguage } from './i18n';
+import { useDocsName } from './project-brand';
 // One document. The reading pane gives its width to the prose and diagrams;
 // provenance (file, sources, warnings) is a closed footer and the outline is
 // one click away in the titlebar rather than a permanent column. A chart
@@ -7,7 +9,7 @@
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Token, Tokens } from 'marked';
-import { ChevronRight, ListTree } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import type { CatalogIssue, DocumentResponse, DocumentSummary, LinkTarget, UnknownDocumentResponse } from '../shared/api';
 import { useProjectReads } from './project-opening/project-context';
 import { groupByKind, KIND_NAME, KIND_SINGULAR } from './kinds';
@@ -21,7 +23,7 @@ import { AppLink, documentPath, navigate, scrollToHash, useSearchAndHash } from 
 import { Titlebar } from './shell';
 import { plainText } from '../shared/markdown';
 import { DocumentStatusLabel, IconButton, QuietButton, SegmentedControl, SegmentedControlOption } from './ui';
-import { useEscapeLayer } from './layers';
+import { OutlineMenu } from './outline-menu';
 import { useNarrow } from './viewport';
 
 type PageState =
@@ -60,9 +62,7 @@ export function DocumentPage(props: { id: string; catalogVersion: string; onStal
     return (
       <>
         <Titlebar current={id} />
-        <div className="page-status" aria-busy="true" data-page-state="loading">
-          Loading…
-        </div>
+        <div className="page-status" aria-busy="true" data-page-state="loading">{t("Loading…")}</div>
       </>
     );
   }
@@ -72,7 +72,7 @@ export function DocumentPage(props: { id: string; catalogVersion: string; onStal
         <Titlebar current={id} />
         <div className="page-status" role="alert" data-page-state="failed">
           <p>{state.message}</p>
-          <QuietButton onClick={() => setAttempt((n) => n + 1)}>Try again</QuietButton>
+          <QuietButton onClick={() => setAttempt((n) => n + 1)}>{t("Try again")}</QuietButton>
         </div>
       </>
     );
@@ -124,6 +124,7 @@ export function chooseView(search: string, hash: string, hasDiagrams: boolean): 
 const NO_DETAILS: readonly DiagramDetailEntry[] = [];
 
 function DocumentView({ response, focusOnLoad }: { response: DocumentResponse; focusOnLoad: boolean }) {
+  const docsName = useDocsName();
   const { document, breadcrumbs, children, sources, issues } = response;
   // Closed on every document: DocumentView is keyed by document, so this starts false each time.
   const [provenanceOpen, setProvenanceOpen] = useState(false);
@@ -257,9 +258,9 @@ function DocumentView({ response, focusOnLoad }: { response: DocumentResponse; f
   }, []);
 
   useEffect(() => {
-    window.document.title = `${document.title} · Nessa Docs`;
+    window.document.title = `${document.title} · ${docsName}`;
     if (focusOnLoad) title.current?.focus({ preventScroll: true });
-  }, [document.title, focusOnLoad]);
+  }, [document.title, focusOnLoad, docsName]);
 
   // On arrival and on every view change: the named section, or the top.
   const hash = window.location.hash;
@@ -305,15 +306,11 @@ function DocumentView({ response, focusOnLoad }: { response: DocumentResponse; f
         variant="glass"
         value={view}
         onValueChange={(value) => setView(value === 'details' ? 'details' : 'diagrams')}
-        aria-label="View"
+        aria-label={t("View")}
         className="view-switch"
       >
-        <SegmentedControlOption value="diagrams" data-view="diagrams">
-          Diagrams
-        </SegmentedControlOption>
-        <SegmentedControlOption value="details" data-view="details">
-          Details
-        </SegmentedControlOption>
+        <SegmentedControlOption value="diagrams" data-view="diagrams">{t("Diagrams")}</SegmentedControlOption>
+        <SegmentedControlOption value="details" data-view="details">{t("Details")}</SegmentedControlOption>
       </SegmentedControl>
     ) : null;
 
@@ -326,7 +323,7 @@ function DocumentView({ response, focusOnLoad }: { response: DocumentResponse; f
         actions={
           <>
             {viewSwitch ? <div className="wide-only view-switch-slot">{viewSwitch}</div> : null}
-            {outline.length > 1 ? <OutlineMenu headings={outline} hrefFor={detailsHref} /> : null}
+            {outline.length > 1 ? <OutlineMenu label={t("On this page")} hint={t("Jump to section · Esc to close")} headings={outline} hrefFor={detailsHref} /> : null}
           </>
         }
       />
@@ -339,25 +336,25 @@ function DocumentView({ response, focusOnLoad }: { response: DocumentResponse; f
       >
         <article className="document" aria-labelledby="doc-title">
           <header className="document-header" data-compact={view === 'diagrams' ? '' : undefined}>
-            <h1 id="doc-title" ref={title} tabIndex={-1}>
+            <h1 dir="auto" id="doc-title" ref={title} tabIndex={-1}>
               {document.title}
             </h1>
             <p className="document-meta">
-              <span className="document-kind">{KIND_SINGULAR[document.kind]}</span>
+              <span className="document-kind">{t(KIND_SINGULAR[document.kind])}</span>
               <DocumentStatusLabel status={document.status} />
               {issues.length > 0 ? (
                 <button type="button" className="meta-warning" onClick={openProvenance} aria-controls={provenanceId}>
-                  {issues.length} warning{issues.length === 1 ? '' : 's'}
+                  {issues.length} {t(issues.length === 1 ? "warning" : "warnings")}
                 </button>
               ) : null}
               {view === 'diagrams' && !summaryRepeatsTitle ? (
-                <span className="document-summary-inline" title={document.summary}>
+                <span dir="auto" className="document-summary-inline" title={document.summary}>
                   {document.summary}
                 </span>
               ) : null}
             </p>
             {view === 'details' && !summaryRepeatsTitle && !bodyOpensWithSummary ? (
-              <p className="document-summary">{document.summary}</p>
+              <p dir="auto" className="document-summary">{document.summary}</p>
             ) : null}
             {viewSwitch ? <div className="narrow-only view-switch-slot">{viewSwitch}</div> : null}
           </header>
@@ -389,16 +386,16 @@ function DocumentView({ response, focusOnLoad }: { response: DocumentResponse; f
             onToggle={(event) => setProvenanceOpen(event.currentTarget.open)}
           >
             <summary data-action="provenance">
-              <span className="provenance-title">Sources and provenance</span>
+              <span className="provenance-title">{t("Sources and provenance")}</span>
               <span className="provenance-count">
-                {sources.length} source{sources.length === 1 ? '' : 's'}
-                {issues.length > 0 ? ` · ${issues.length} warning${issues.length === 1 ? '' : 's'}` : ''}
+                {sources.length} {t(sources.length === 1 ? "source" : "sources")}
+                {issues.length > 0 ? ` · ${issues.length} ${t(issues.length === 1 ? "warning" : "warnings")}` : ''}
               </span>
             </summary>
             <div className="provenance-body">
               <dl>
                 <div>
-                  <dt>File</dt>
+                  <dt>{t("File")}</dt>
                   <dd>
                     <code>{document.file}</code>
                   </dd>
@@ -410,10 +407,10 @@ function DocumentView({ response, focusOnLoad }: { response: DocumentResponse; f
                   </dd>
                 </div>
                 <div>
-                  <dt>Sources</dt>
+                  <dt>{t("Sources")}</dt>
                   <dd>
                     {sources.length === 0 ? (
-                      <span className="quiet">None listed</span>
+                      <span className="quiet">{t("None listed")}</span>
                     ) : (
                       <ul className="source-list">
                         {sources.map((source) => (
@@ -424,11 +421,11 @@ function DocumentView({ response, focusOnLoad }: { response: DocumentResponse; f
                         ))}
                       </ul>
                     )}
-                    <p className="details-note">Provenance only: paths are named and checked for existence, never opened.</p>
+                    <p className="details-note">{t("Provenance only: paths are named and checked for existence, never opened.")}</p>
                   </dd>
                 </div>
               </dl>
-              {issues.length > 0 ? <IssueList title="Warnings" issues={issues} /> : null}
+              {issues.length > 0 ? <IssueList title={t("Warnings")} issues={issues} /> : null}
             </div>
           </details>
         </article>
@@ -452,66 +449,20 @@ function DocumentView({ response, focusOnLoad }: { response: DocumentResponse; f
 }
 
 /** "On this page": the headings, one click away instead of a permanent column. */
-function OutlineMenu({ headings, hrefFor }: { headings: readonly Heading[]; hrefFor: (slug: string) => string }) {
-  const [open, setOpen] = useState(false);
-  const menuId = useId();
-  const button = useRef<HTMLButtonElement>(null);
-  const list = useRef<HTMLDivElement>(null);
-  useEscapeLayer(open, () => {
-    setOpen(false);
-    button.current?.focus();
-  });
-  useEffect(() => {
-    if (!open) return;
-    list.current?.querySelector<HTMLElement>('a')?.focus();
-    const onPointer = (event: PointerEvent) => {
-      if (!list.current?.contains(event.target as Node) && !button.current?.contains(event.target as Node)) setOpen(false);
-    };
-    window.addEventListener('pointerdown', onPointer);
-    return () => window.removeEventListener('pointerdown', onPointer);
-  }, [open]);
-  return (
-    <div className="outline-menu">
-      <IconButton ref={button} label="On this page" aria-expanded={open} aria-controls={menuId} onClick={() => setOpen((v) => !v)} data-action="outline">
-        <ListTree />
-      </IconButton>
-      {open ? (
-        <div ref={list} id={menuId} className="popover outline" role="navigation" aria-label="On this page">
-          <ul>
-            {headings.map((heading) => (
-              <li key={heading.slug} data-depth={heading.depth}>
-                <a
-                  href={hrefFor(heading.slug)}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    setOpen(false);
-                    navigate(hrefFor(heading.slug));
-                  }}
-                >
-                  {heading.text}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 function ChildList({ items }: { items: readonly DocumentSummary[] }) {
   return (
-    <section className="child-section" aria-label="Contents">
+    <section className="child-section" aria-label={t("Contents")}>
       {groupByKind(items).map((group) => (
         <div key={group.kind} className="child-group">
-          <h2 className="caption">{KIND_NAME[group.kind]}</h2>
+          <h2 className="caption">{t(KIND_NAME[group.kind])}</h2>
           <ul className="child-list">
             {group.items.map((child) => (
               <li key={child.id}>
                 <AppLink to={documentPath(child.id)} className="child-row card" data-doc-id={child.id}>
                   <span className="child-title">{child.title}</span>
                   {child.summary.trim().toLowerCase() !== child.title.trim().toLowerCase() ? (
-                    <span className="child-summary">{child.summary}</span>
+                    <span dir="auto" className="child-summary">{child.summary}</span>
                   ) : null}
                   <span className="child-meta">
                     {child.children.length > 0 ? <span className="child-count">{child.children.length}</span> : null}
@@ -549,24 +500,26 @@ export function IssueList({ title, issues }: { title: string; issues: readonly C
 }
 
 function UnknownDocument({ response }: { response: UnknownDocumentResponse }) {
+  const language = useLanguage();
+  const docsName = useDocsName();
   useEffect(() => {
-    window.document.title = 'Document not found · Nessa Docs';
-  }, []);
+    window.document.title = `${t("Document not found")} · ${docsName}`;
+  }, [docsName, language]);
   return (
     <>
-      <Titlebar current="Not found" />
+      <Titlebar current={t("Not found")} />
       <div className="page not-found" data-page-state="not-found">
-        <h1 tabIndex={-1}>No document “{response.id}”</h1>
+        <h1 tabIndex={-1}>{t("No document")} “<bdi>{response.id}</bdi>”</h1>
         {response.rejected.length > 0 ? (
           <>
-            <p>A file declares this ID, but it was rejected:</p>
-            <IssueList title="Why it was rejected" issues={response.rejected} />
+            <p>{t("A file declares this ID, but it was rejected:")}</p>
+            <IssueList title={t("Why it was rejected")} issues={response.rejected} />
           </>
         ) : (
-          <p>No accepted document in docs/state has this ID. Nothing else is shown in its place.</p>
+          <p>{t("No accepted document in docs/state has this ID. Nothing else is shown in its place.")}</p>
         )}
         <p>
-          <AppLink to="/">Open the system overview</AppLink> or search from the sidebar.
+          <AppLink to="/">{t("Open the system overview")}</AppLink> {t("or search from the sidebar.")}
         </p>
       </div>
     </>

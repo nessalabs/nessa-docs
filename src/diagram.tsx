@@ -1,3 +1,4 @@
+import { t, useLanguage } from './i18n';
 // Renders one Mermaid block from the current document, live, as SVG.
 // Mermaid runs with securityLevel "strict"; renders are serialized and a
 // render that finishes after its block unmounted or changed is discarded.
@@ -365,12 +366,14 @@ export function Diagram({
   /** Where the open inspector begins on screen (viewport x), when it covers the right of this chart. */
   revealLeftOf?: number | null;
 }) {
+  const language = useLanguage();
   const appearance = useAppearance();
   const [state, setState] = useState<DiagramState>({ kind: 'rendering' });
   const [zoom, setZoom] = useState<Zoom>({ mode: 'readable' });
   const [fitScale, setFitScale] = useState(1);
   const [expanded, setExpanded] = useState(false);
   const host = useRef<HTMLDivElement>(null);
+  const labelUpdates = useRef<(() => void)[]>([]);
   const stage = useRef<HTMLDivElement>(null);
   const figure = useRef<HTMLElement>(null);
   const expandButton = useRef<HTMLButtonElement>(null);
@@ -430,6 +433,13 @@ export function Diagram({
     svg.style.maxWidth = 'none';
     const nodes = nodeElements(svg, state.renderId);
     const cleanups: (() => void)[] = [];
+    const updates: (() => void)[] = [];
+    const bindLabel = (element: Element, text: () => string) => {
+      const update = () => element.setAttribute('aria-label', text());
+      update();
+      updates.push(update);
+    };
+    labelUpdates.current = updates;
     // Click (a press that did not pan: the stage takes a pan's click), Enter or Space.
     const activate = (element: Element, action: () => void) => {
       const onClick = (event: Event) => {
@@ -473,12 +483,12 @@ export function Diagram({
           element.setAttribute('role', 'button');
           element.setAttribute('aria-haspopup', 'dialog');
           element.setAttribute('aria-expanded', 'false');
-          element.setAttribute('aria-label', `Details: ${node}${target ? ` (also opens ${target.title})` : ''}`);
+          bindLabel(element, () => `${t("Details:")} ${node}${target ? ` (${t("also opens")} ${target.title})` : ''}`);
           element.setAttribute('data-detail-key', String(entry.key));
           activate(element, () => selectDetail.current?.(entry.key, element));
         } else if (target) {
           element.setAttribute('role', 'link');
-          element.setAttribute('aria-label', `Open ${target.title}`);
+          bindLabel(element, () => `${t("Open")} ${target.title}`);
           activate(element, () => navigate(documentPath(target.id)));
         }
       }
@@ -502,7 +512,7 @@ export function Diagram({
       edgeLabel.setAttribute('role', 'button');
       edgeLabel.setAttribute('aria-haspopup', 'dialog');
       edgeLabel.setAttribute('aria-expanded', 'false');
-      edgeLabel.setAttribute('aria-label', `Details: ${ELEMENT_NAMES[entry.detail.family].edge.toLowerCase()} ${edge.from} to ${edge.to}, ${edge.label}`);
+      bindLabel(edgeLabel, () => `${t("Details:")} ${t(ELEMENT_NAMES[entry.detail.family].edge).toLowerCase()} ${edge.from} ${t("to")} ${edge.to}, ${edge.label}`);
       edgeLabel.setAttribute('data-detail-key', String(entry.key));
       addEdgeMark(edgeLabel, label);
       activate(edgeLabel, open);
@@ -536,20 +546,30 @@ export function Diagram({
     // An image's children are presentational, which would hide the controls
     // from assistive technology; a diagram with any is a labelled group.
     if (linkedCount + explainedCount > 0) {
-      const parts = [
-        linkedCount > 0 ? `${linkedCount} node${linkedCount === 1 ? '' : 's'} open other documents` : null,
-        explainedCount > 0 ? `${explainedCount} element${explainedCount === 1 ? '' : 's'} have details` : null,
-      ];
       svg.setAttribute('role', 'group');
-      svg.setAttribute('aria-label', `Diagram: ${parts.filter(Boolean).join('; ')}`);
+      bindLabel(svg, () => {
+        // Category labels avoid attaching English plural suffixes to Arabic.
+        const parts = [
+          linkedCount > 0 ? `${t("Linked document nodes")}: ${linkedCount.toLocaleString(document.documentElement.lang)}` : null,
+          explainedCount > 0 ? `${t("Elements with details")}: ${explainedCount.toLocaleString(document.documentElement.lang)}` : null,
+        ];
+        return `${t("Diagram:")} ${parts.filter(Boolean).join('; ')}`;
+      });
     } else {
       svg.setAttribute('role', 'img');
     }
     return () => {
       cleanups.forEach((cleanup) => cleanup());
+      labelUpdates.current = [];
       container.innerHTML = '';
     };
   }, [state, links, details]);
+
+  // Translate accessible labels without replacing SVG nodes: selection and
+  // the inspector's focus-return element must keep their DOM identity.
+  useLayoutEffect(() => {
+    labelUpdates.current.forEach(update => update());
+  }, [language, state, links, details]);
 
   // The open detail is marked in place; selection never re-renders the SVG.
   useLayoutEffect(() => {
@@ -730,27 +750,25 @@ export function Diagram({
   const fitsWhole = scale <= fitScale + 0.001;
 
   const controls = (
-    <div className="diagram-actions" role="group" aria-label="Diagram view">
+    <div className="diagram-actions" role="group" aria-label={t("Diagram view")}>
       {state.kind === 'rendered' ? (
         <>
-          <QuietButton onClick={() => setZoom({ mode: 'fit' })} aria-pressed={fitsWhole} title="Show the whole diagram" data-action="fit">
-            Fit
-          </QuietButton>
-          <IconButton label="Zoom out" onClick={() => step(1 / 1.25)} data-action="zoom-out">
+          <QuietButton onClick={() => setZoom({ mode: 'fit' })} aria-pressed={fitsWhole} title={t("Show the whole diagram")} data-action="fit">{t("Fit")}</QuietButton>
+          <IconButton label={t("Zoom out")} onClick={() => step(1 / 1.25)} data-action="zoom-out">
             <Minus />
           </IconButton>
           <span className="diagram-scale" aria-live="polite" data-testid="diagram-scale">
             {Math.round(scale * 100)}%
           </span>
-          <IconButton label="Zoom in" onClick={() => step(1.25)} data-action="zoom-in">
+          <IconButton label={t("Zoom in")} onClick={() => step(1.25)} data-action="zoom-in">
             <Plus />
           </IconButton>
           {expanded ? (
-            <IconButton label="Close expanded diagram" onClick={() => setExpanded(false)} data-action="collapse">
+            <IconButton label={t("Close expanded diagram")} onClick={() => setExpanded(false)} data-action="collapse">
               <Minimize2 />
             </IconButton>
           ) : (
-            <IconButton ref={expandButton} label="Expand diagram" onClick={() => setExpanded(true)} data-action="expand">
+            <IconButton ref={expandButton} label={t("Expand diagram")} onClick={() => setExpanded(true)} data-action="expand">
               <Maximize2 />
             </IconButton>
           )}
@@ -778,9 +796,7 @@ export function Diagram({
             <span className="diagram-caption-text" title={caption.text}>
               {caption.text}
             </span>
-            <AppLink to={caption.detailsHref} className="diagram-read" data-action="details-section">
-              In Details
-            </AppLink>
+            <AppLink to={caption.detailsHref} className="diagram-read" data-action="details-section">{t("In Details")}</AppLink>
           </figcaption>
         ) : (
           <span />
@@ -789,24 +805,23 @@ export function Diagram({
       </div>
       {state.kind === 'failed' ? (
         <div className="diagram-error" role="alert">
-          <strong>This diagram could not be rendered.</strong>
+          <strong>{t("This diagram could not be rendered.")}</strong>
           <p>{state.message}</p>
         </div>
       ) : state.kind === 'too-large' ? (
         <div className="diagram-error" data-too-large="">
-          <strong>This chart is not drawn: it is too long.</strong>
+          <strong>{t("This chart is not drawn: it is too long.")}</strong>
           <p>
-            Its Mermaid source is {state.length.toLocaleString('en')} characters; charts up to {MERMAID_MAX_TEXT_SIZE.toLocaleString('en')} are
-            drawn.
+            {t('Its Mermaid source is {length} characters; charts up to {limit} are drawn.')
+              .replace('{length}', state.length.toLocaleString(language))
+              .replace('{limit}', MERMAID_MAX_TEXT_SIZE.toLocaleString(language))}
           </p>
         </div>
       ) : state.kind === 'outdated' ? (
         <div className="diagram-error" role="alert" data-outdated="">
-          <strong>The site was rebuilt since this page loaded, so this diagram's renderer is no longer available.</strong>
+          <strong>{t("The site was rebuilt since this page loaded, so this diagram's renderer is no longer available.")}</strong>
           <p>{state.message}</p>
-          <QuietButton onClick={() => window.location.reload()} data-action="reload-page">
-            Reload page
-          </QuietButton>
+          <QuietButton onClick={() => window.location.reload()} data-action="reload-page">{t("Reload page")}</QuietButton>
         </div>
       ) : (
         <div
@@ -814,15 +829,15 @@ export function Diagram({
           className="diagram-stage"
           data-zoom={zoom.mode}
           data-fits={fitsWhole ? '' : undefined}
-          title="Drag to pan · Ctrl or ⌘ + scroll, or pinch, to zoom"
+          title={t("Drag to pan · Ctrl or ⌘ + scroll, or pinch, to zoom")}
         >
-          {state.kind === 'rendering' ? <p className="diagram-pending">Rendering diagram…</p> : null}
+          {state.kind === 'rendering' ? <p className="diagram-pending">{t("Rendering diagram…")}</p> : null}
           <div ref={host} className="diagram-svg" />
         </div>
       )}
       {/* Diagnostic only: a chart that could not be drawn shows what it was given. */}
       {state.kind === 'failed' || state.kind === 'outdated' ? (
-        <pre className="diagram-source" aria-label="Mermaid source">
+        <pre className="diagram-source" aria-label={t("Mermaid source")}>
           <code>{source}</code>
         </pre>
       ) : null}

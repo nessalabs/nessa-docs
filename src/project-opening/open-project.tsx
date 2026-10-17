@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import type { ProjectOutcome, FolderPickerStatus } from '../../shared/projects';
 import type { ProjectSource } from './read-port';
@@ -50,26 +51,26 @@ export function OpenProject({ source, initial }: { source: ProjectSource; initia
     } catch { if (!controller.signal.aborted) { setOperation(null); setPickerError('The folder chooser could not answer. Try again or paste the path.'); } }
   };
   return <>
-    <Titlebar current="Open project" />
+    <Titlebar current={t("Open project")} />
     <div className="page open-project" data-page-state="welcome">
-      <h1>Open project</h1>
-      <p>Browse the architecture and behavior of your project. Install the nessa-docs skill and use <code>$nessa-docs</code> with your coding agent to create <code>docs/state</code>, then open your project folder here.</p>
-      <p><a href="https://github.com/nessalabs/nessa-docs#install-the-skill" target="_blank" rel="noopener noreferrer">Skill installation instructions</a></p>
+      <h1>{t("Open project")}</h1>
+      <p>{t("Browse the architecture and behavior of your project. Install the nessa-docs skill and use")} <code>$nessa-docs</code> {t("with your coding agent to create")} <code>docs/state</code>{t(", then open your project folder here.")}</p>
+      <p><a href="https://github.com/nessalabs/nessa-docs#install-the-skill" target="_blank" rel="noopener noreferrer">{t("Skill installation instructions")}</a></p>
       <div className="open-project-actions">
-        <QuietButton onClick={async () => { try { await navigator.clipboard.writeText(AGENT_PROMPT); setCopy('Copied'); } catch { setCopy('Select the prompt below'); } }}>{copy}</QuietButton>
-        <QuietButton disabled={busy} onClick={() => void open(true)}>Browse example</QuietButton>
+        <QuietButton onClick={async () => { try { await navigator.clipboard.writeText(AGENT_PROMPT); setCopy('Copied'); } catch { setCopy('Select the prompt below'); } }}>{t(copy)}</QuietButton>
+        <QuietButton disabled={busy} onClick={() => void open(true)}>{t("Browse example")}</QuietButton>
       </div>
       {copy === 'Select the prompt below' ? <pre className="agent-prompt">{AGENT_PROMPT}</pre> : null}
       <form onSubmit={(event) => { event.preventDefault(); void open(); }}>
-        <label htmlFor="project-folder">Project folder</label>
-        <div className="project-folder-input"><Input id="project-folder" value={path} onChange={(event) => { pending.current?.abort(); setOperation(null); setPath(event.target.value); setResult(undefined); setPickerError(null); }} placeholder="/absolute/path/to/project" aria-describedby="project-folder-hint" autoComplete="off" spellCheck={false} />
-        <Button type="button" variant="outline" size="sm" disabled={busy || pickerStatus?.kind !== 'available'} aria-describedby="folder-picker-hint" aria-busy={operation === 'choosing'} onClick={() => void choose()}>{operation === 'choosing' ? 'Choosing…' : 'Browse…'}</Button></div>
-        <span id="folder-picker-hint" className={pickerStatus?.kind === 'unsupported' ? 'muted picker-hint' : 'visually-hidden'}>{pickerStatus?.kind === 'unsupported' ? pickerStatus.message : 'Choose a folder on this computer.'}</span>
-        <p id="project-folder-hint" className="muted">Paste the absolute path to a folder on the computer running Nessa Docs. Projects are read only.</p>
-        <Button type="submit" size="sm" disabled={busy} aria-busy={busy}>{operation === 'opening' ? 'Opening…' : 'Open project'}</Button>
+        <label htmlFor="project-folder">{t("Project folder")}</label>
+        <div className="project-folder-input"><Input id="project-folder" dir="ltr" value={path} onChange={(event) => { pending.current?.abort(); setOperation(null); setPath(event.target.value); setResult(undefined); setPickerError(null); }} placeholder="/absolute/path/to/project" aria-describedby="project-folder-hint" autoComplete="off" spellCheck={false} />
+        <Button type="button" variant="outline" size="sm" disabled={busy || pickerStatus?.kind !== 'available'} aria-describedby="folder-picker-hint" aria-busy={operation === 'choosing'} onClick={() => void choose()}>{operation === 'choosing' ? t('Choosing…') : t('Browse…')}</Button></div>
+        <span id="folder-picker-hint" className={pickerStatus?.kind === 'unsupported' ? 'muted picker-hint' : 'visually-hidden'}>{pickerStatus?.kind === 'unsupported' ? pickerStatus.message : t('Choose a folder on this computer.')}</span>
+        <p id="project-folder-hint" className="muted">{t("Paste the absolute path to a folder on the computer running Nessa Docs. Projects are read only.")}</p>
+        <Button type="submit" size="sm" disabled={busy} aria-busy={busy}>{operation === 'opening' ? t('Opening…') : t('Open project')}</Button>
       </form>
       {pickerError ? <div className="project-opening-error" role="alert"><p>{pickerError}</p></div> : null}
-      {result?.kind === 'refused' ? <div className="project-opening-error" role="alert"><p>{result.message}</p><IssueList title="Errors and warnings" issues={result.issues} /></div> : null}
+      {result?.kind === 'refused' ? <div className="project-opening-error" role="alert"><p>{result.message}</p><IssueList title={t("Errors and warnings")} issues={result.issues} /></div> : null}
     </div>
   </>;
 }

@@ -120,7 +120,7 @@ figure {
 
 .skip-link {
   position: absolute;
-  left: 12px;
+  inset-inline-start: 12px;
   top: -48px;
   z-index: 60;
   padding: 6px 10px;
@@ -255,12 +255,12 @@ figure {
   position: absolute;
   top: var(--gutter);
   bottom: var(--gutter);
-  left: calc(var(--gutter) + var(--sidebar-w) + var(--gutter) / 2 - 6px);
+  inset-inline-start: calc(var(--gutter) + var(--sidebar-w) + var(--gutter) / 2 - 6px);
   z-index: 15;
   width: 12px;
   cursor: col-resize;
   touch-action: none;
-  transition: left 240ms var(--ease);
+  transition: inset-inline-start 240ms var(--ease);
 }
 .shell[data-resizing] .sidebar-resizer {
   transition: none;
@@ -312,7 +312,7 @@ figure {
 .app-bar {
   position: fixed;
   top: var(--gutter);
-  left: var(--gutter);
+  inset-inline-start: var(--gutter);
   z-index: 20;
   display: flex;
   align-items: center;
@@ -357,11 +357,11 @@ figure {
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   backdrop-filter: blur(20px) saturate(160%);
   border-bottom: 1px solid var(--hairline);
-  transition: padding-left 240ms var(--ease);
+  transition: padding-inline-start 240ms var(--ease);
 }
 .shell[data-sidebar='closed'] .titlebar,
 .shell[data-narrow] .titlebar {
-  padding-left: var(--app-bar-w);
+  padding-inline-start: var(--app-bar-w);
 }
 .titlebar-controls {
   display: flex;
@@ -373,7 +373,7 @@ figure {
   flex: none;
   align-items: center;
   gap: 2px;
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 
 .breadcrumbs {
@@ -441,7 +441,7 @@ figure {
 .search-icon {
   position: absolute;
   top: 17px;
-  left: 19px;
+  inset-inline-start: 19px;
   display: flex;
   color: var(--faint);
   pointer-events: none;
@@ -453,7 +453,7 @@ figure {
 }
 .search .search-input {
   height: 30px;
-  padding-left: 30px;
+  padding-inline: 30px;
   border-radius: var(--radius-row);
   border-color: transparent;
   background: var(--hover);
@@ -620,7 +620,7 @@ figure {
   font-size: var(--text-caption);
   font-weight: 600;
   letter-spacing: 0.01em;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 .section-toggle:hover {
@@ -759,8 +759,8 @@ figure {
   align-self: center;
   width: 6px;
   height: 6px;
-  margin-right: 2px;
-  border-right: 1.5px solid currentColor;
+  margin-inline-end: 2px;
+  border-inline-end: 1.5px solid currentColor;
   border-bottom: 1.5px solid currentColor;
   transform: rotate(-45deg);
   transition: transform 180ms var(--ease);
@@ -878,7 +878,7 @@ figure {
   min-width: 18px;
   font-size: var(--text-small);
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  text-align: end;
 }
 .child-count::after {
   content: ' docs';
@@ -930,7 +930,7 @@ figure {
 /* Text when shown (hover, focus), so the readable --muted, not the icon tone --faint:
    verification/real-data.mjs measures it ≥ 4.5:1 in both appearances. */
 .heading-anchor {
-  margin-left: 6px;
+  margin-inline-start: 6px;
   color: var(--muted);
   font-weight: 400;
   opacity: 0;
@@ -949,7 +949,8 @@ figure {
 }
 .prose ul,
 .prose ol {
-  padding-left: 22px;
+  /* Authored items can use either direction within one list. */
+  padding-inline: 22px;
 }
 .prose li + li {
   margin-top: 4px;
@@ -968,8 +969,8 @@ figure {
   overflow-wrap: anywhere;
 }
 .prose blockquote {
-  padding-left: 14px;
-  border-left: 2px solid var(--rim);
+  padding-inline-start: 14px;
+  border-inline-start: 2px solid var(--rim);
   color: var(--ink-2);
 }
 .prose hr {
@@ -1011,7 +1012,7 @@ figure {
 .prose td {
   min-width: 8ch;
   padding: 8px 12px;
-  text-align: left;
+  text-align: start;
   vertical-align: top;
 }
 .prose th {
@@ -1029,7 +1030,7 @@ figure {
   color: var(--ink);
 }
 .evidence-path {
-  margin-left: 4px;
+  margin-inline-start: 4px;
   color: var(--muted);
   font-size: 0.8em;
   overflow-wrap: anywhere;
@@ -1039,12 +1040,12 @@ figure {
   background: none;
 }
 .source-list .evidence-path {
-  margin-left: 0;
+  margin-inline-start: 0;
   color: var(--ink-2);
   font-size: 12px;
 }
 .evidence-flag {
-  margin-left: 6px;
+  margin-inline-start: 6px;
   color: var(--muted);
   font-size: var(--text-caption);
   font-weight: 600;
@@ -1063,7 +1064,7 @@ figure {
 }
 .external-link::after {
   content: '↗';
-  margin-left: 2px;
+  margin-inline-start: 2px;
   font-size: 0.8em;
 }
 
@@ -1149,7 +1150,7 @@ figure {
   display: flex;
   align-items: center;
   gap: 2px;
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 .diagram-scale {
   min-width: 42px;
@@ -1420,7 +1421,7 @@ figure {
 .popover {
   position: absolute;
   top: calc(100% + 6px);
-  right: 0;
+  inset-inline-end: 0;
   z-index: 20;
   width: min(340px, calc(100vw - 32px));
   max-height: min(60vh, 520px);
@@ -1448,7 +1449,7 @@ figure {
   line-height: 1.35;
 }
 .outline li[data-depth='3'] a {
-  padding-left: 22px;
+  padding-inline-start: 22px;
   color: var(--muted);
 }
 .outline a:hover,
@@ -1571,7 +1572,7 @@ figure {
   }
   .app-bar {
     top: 0;
-    left: 0;
+    inset-inline-start: 0;
     z-index: 50;
     height: 52px;
     gap: 4px;
@@ -1597,7 +1598,7 @@ figure {
     position: fixed;
     top: var(--gutter);
     bottom: var(--gutter);
-    left: var(--gutter);
+    inset-inline-start: var(--gutter);
     z-index: 40;
     width: min(84vw, 320px);
     background: var(--pane);
@@ -1741,8 +1742,8 @@ figure {
 .document-summary-inline {
   min-width: 0;
   overflow: hidden;
-  padding-left: 14px;
-  border-left: 1px solid var(--rim);
+  padding-inline-start: 14px;
+  border-inline-start: 1px solid var(--rim);
   color: var(--muted);
   text-overflow: ellipsis;
 }
@@ -1766,7 +1767,7 @@ figure {
 }
 .view-switch-slot {
   display: flex;
-  margin-right: 6px;
+  margin-inline-end: 6px;
 }
 .view-switch-slot.narrow-only {
   display: none;
@@ -1798,7 +1799,7 @@ figure {
     flex: 1 1 100%;
   }
   .diagram-actions {
-    margin-left: -8px;
+    margin-inline-start: -8px;
   }
   .diagram[data-canvas] .diagram-stage {
     max-height: max(320px, calc(100dvh - 236px));
@@ -1842,6 +1843,11 @@ figure {
 .child-row:focus-visible .child-chevron {
   color: var(--ink);
   transform: translateX(2px);
+}
+.child-chevron:dir(rtl) { transform: scaleX(-1); }
+.child-row:hover .child-chevron:dir(rtl),
+.child-row:focus-visible .child-chevron:dir(rtl) {
+  transform: translateX(-2px) scaleX(-1);
 }
 @media (max-width: 599px) {
   .child-row {
@@ -1887,3 +1893,41 @@ figure {
 .project-folder-input input { flex: 1; }
 .open-project form .project-folder-input button { flex: none; }
 .picker-hint { font-size: var(--text-small); line-height: 1.5; }
+
+/* Reading direction follows each authored block. Canvas coordinates remain LTR. */
+.prose :is(p, li, h2, h3, h4, h5, h6, th, td),
+.document-header h1, .row-label, .inspector-title, .inspector-label {
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+code, pre, .evidence-path, .diagram-stage, .diagram-svg, .brand {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+pre, code { text-align: left; }
+[dir='rtl'] .titlebar-controls svg,
+[dir='rtl'] .breadcrumb-separator,
+[dir='rtl'] .disclosure:not([aria-expanded='true']) svg { transform: scaleX(-1); }
+
+@media (max-width: 899px) {
+  [dir='rtl'] .sidebar:not([data-open='true']) { transform: translateX(calc(100% + 2 * var(--gutter))); }
+}
+
+@media (min-width: 900px) {
+  [dir='rtl'] .shell[data-sidebar='open'] .detail-inspector:not(:modal) {
+    right: calc(var(--sidebar-w) + 2 * var(--gutter) + 10px);
+  }
+}
+
+/* Project identity and always-available sidebar language access. */
+.sidebar-footer { gap: 6px; }
+.settings-link { min-width: 0; border: 1px solid transparent; transition: background-color 140ms, border-color 140ms; }
+.settings-link:hover, .settings-link:focus-visible { background: var(--hover); border-color: var(--hairline); }
+.settings-link:hover .row-icon, .settings-link:focus-visible .row-icon { color: var(--ink); }
+.language-switch { flex: none; gap: 5px; }
+.language-switch svg { width: 15px; height: 15px; }
+.chrome-tooltip { z-index: 100; max-width: min(280px, calc(100vw - 24px)); padding: 8px 10px; border: 1px solid var(--hairline); border-radius: 8px; background: var(--pane); color: var(--ink); font-size: 12px; line-height: 1.5; box-shadow: 0 4px 16px #0003; }
+.chrome-tooltip svg { fill: var(--pane); }
+@media (prefers-reduced-motion: reduce) { .settings-link { transition: none; } }
+
+.inspector-relation { min-width: 0; overflow-wrap: anywhere; unicode-bidi: isolate; }

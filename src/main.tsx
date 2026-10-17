@@ -1,3 +1,4 @@
+import { applyLanguage, readLanguage } from './i18n';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@fontsource-variable/geist';
@@ -10,6 +11,7 @@ import './styles.css';
 
 recordClientEntry(import.meta.url);
 applyAppearance(readAppearance());
+applyLanguage(readLanguage());
 
 const source = createHttpProjectSource(window.fetch.bind(window));
 const container = document.getElementById('root');
