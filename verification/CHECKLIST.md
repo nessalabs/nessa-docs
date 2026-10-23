@@ -287,3 +287,5 @@ headless journeys inject adapter outcomes and never open an OS dialog.
 | FS5 | Final-component symlink, nonregular or oversized opened object | Refuse; no unbounded allocation; every opened handle closes (`files.test`) |
 
 Filesystem checks reject observed path/identity changes; Node pathname operations do not establish an atomic document snapshot or a universal guarantee against coordinated hostile ABA races.
+
+Source checkpoints (`source-revision.mjs`): at 1440px and 390px the header displays the page's short reviewed commit, activates provenance with its full exact ID, and causes no viewport overflow. A child without a checkpoint displays explicit unknown provenance instead of inheriting its root's commit. Both states survive navigation without page errors.

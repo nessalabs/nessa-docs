@@ -85,6 +85,8 @@ no separate navigation manifest. The [example project](examples/store) demonstra
 an overview, a lifecycle with explanations, a short sequence and an external
 contract. Its source is illustrative, with no real payment provider or database.
 
+The optional per-page [`sourceRevision`](skills/nessa-docs/references/format.md#source-review-checkpoint) records the exact source commit reviewed. Each page shows its checkpoint or explicitly says it is not recorded; Sources and provenance exposes the full ID. Partial refreshes do not make older pages appear current.
+
 Statecharts describe states of one entity or operation. Component maps describe
 parts that exist together. Sequences explain useful handoffs. These choices draw
 on [Harel's statechart paper](https://www.state-machine.com/doc/Harel87.pdf);

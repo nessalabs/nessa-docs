@@ -23,6 +23,8 @@ export interface DocumentSummary {
   readonly kind: DocumentKind;
   readonly status: DocumentStatus;
   readonly summary: string;
+  /** Authored source commit reviewed for this page, not the catalog hash or checkout HEAD. */
+  readonly sourceRevision?: string;
   readonly parent: string | null;
   /** Child document IDs, ordered by file path. */
   readonly children: readonly string[];

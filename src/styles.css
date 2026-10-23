@@ -708,6 +708,16 @@ figure {
 .document-meta [data-slot='status-label'] {
   font-size: var(--text-ui);
 }
+.meta-revision {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .meta-warning {
   padding: 0;
   border: 0;
