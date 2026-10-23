@@ -131,6 +131,8 @@ export async function runJourneys(engine) {
     c.check('flow: no permanent outline column', (await page.locator(S.outline).count()) === 0);
     await page.locator(S.outlineButton).click();
     c.check('flow: outline popover lists headings and takes focus', (await page.locator(`${S.outline} a`).count()) >= 3 && (await activeElement(page))?.tag === 'a');
+    const outlineStyle = await page.locator(S.outline).evaluate(e => ({ background: getComputedStyle(e).backgroundColor, filter: getComputedStyle(e).backdropFilter }));
+    c.check('flow: outline uses an opaque surface without backdrop blur', !outlineStyle.background.includes(' / ') && !outlineStyle.background.startsWith('rgba') && outlineStyle.filter === 'none', outlineStyle);
     await page.keyboard.press('Escape');
     c.check('flow: Escape closes outline and returns focus', (await page.locator(S.outline).count()) === 0 && (await activeElement(page))?.action === 'outline');
     // Provenance (file, ID, sources) is a closed footer after the content, in Details too.
@@ -240,7 +242,14 @@ export async function runJourneys(engine) {
     // 6d. A section link opens Details at that heading; so does a caption's "In Details".
     await page.goto(`${BASE_URL}/docs/chat-send-first#decisions-and-failure-boundaries`);
     await page.locator('#decisions-and-failure-boundaries').waitFor();
-    await page.waitForTimeout(300);
+    await waitForDiagrams(page);
+    await page.waitForFunction(() => {
+      const heading = document.getElementById('decisions-and-failure-boundaries');
+      const main = document.getElementById('main');
+      const top = Math.round(heading.getBoundingClientRect().top);
+      const atEnd = Math.abs(main.scrollHeight - main.clientHeight - main.scrollTop) <= 2;
+      return top >= 40 && (top <= 160 || (atEnd && top < 900)) && main.scrollTop > 0;
+    }, null, { timeout: 6000 });
     const anchor = await page.locator('#decisions-and-failure-boundaries').evaluate((el) => {
       const main = document.getElementById('main');
       return {

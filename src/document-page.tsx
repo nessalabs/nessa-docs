@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Token, Tokens } from 'marked';
-import { ChevronRight, ListTree } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import type { CatalogIssue, DocumentResponse, DocumentSummary, LinkTarget, UnknownDocumentResponse } from '../shared/api';
 import { useProjectReads } from './project-opening/project-context';
 import { groupByKind, KIND_NAME, KIND_SINGULAR } from './kinds';
@@ -21,7 +21,7 @@ import { AppLink, documentPath, navigate, scrollToHash, useSearchAndHash } from 
 import { Titlebar } from './shell';
 import { plainText } from '../shared/markdown';
 import { DocumentStatusLabel, IconButton, QuietButton, SegmentedControl, SegmentedControlOption } from './ui';
-import { useEscapeLayer } from './layers';
+import { OutlineMenu } from './outline-menu';
 import { useNarrow } from './viewport';
 
 type PageState =
@@ -469,52 +469,6 @@ function DocumentView({ response, focusOnLoad }: { response: DocumentResponse; f
 }
 
 /** "On this page": the headings, one click away instead of a permanent column. */
-function OutlineMenu({ headings, hrefFor }: { headings: readonly Heading[]; hrefFor: (slug: string) => string }) {
-  const [open, setOpen] = useState(false);
-  const menuId = useId();
-  const button = useRef<HTMLButtonElement>(null);
-  const list = useRef<HTMLDivElement>(null);
-  useEscapeLayer(open, () => {
-    setOpen(false);
-    button.current?.focus();
-  });
-  useEffect(() => {
-    if (!open) return;
-    list.current?.querySelector<HTMLElement>('a')?.focus();
-    const onPointer = (event: PointerEvent) => {
-      if (!list.current?.contains(event.target as Node) && !button.current?.contains(event.target as Node)) setOpen(false);
-    };
-    window.addEventListener('pointerdown', onPointer);
-    return () => window.removeEventListener('pointerdown', onPointer);
-  }, [open]);
-  return (
-    <div className="outline-menu">
-      <IconButton ref={button} label="On this page" aria-expanded={open} aria-controls={menuId} onClick={() => setOpen((v) => !v)} data-action="outline">
-        <ListTree />
-      </IconButton>
-      {open ? (
-        <div ref={list} id={menuId} className="popover outline" role="navigation" aria-label="On this page">
-          <ul>
-            {headings.map((heading) => (
-              <li key={heading.slug} data-depth={heading.depth}>
-                <a
-                  href={hrefFor(heading.slug)}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    setOpen(false);
-                    navigate(hrefFor(heading.slug));
-                  }}
-                >
-                  {heading.text}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 function ChildList({ items }: { items: readonly DocumentSummary[] }) {
   return (
