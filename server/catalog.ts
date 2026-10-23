@@ -304,9 +304,9 @@ export async function loadCatalog(
   }
   const documents = new Map<string, CatalogDocument>();
   for (const candidate of ordered) {
-    const { id, title, kind, status, summary, parent, body, sources, diagramLinks } = candidate.parsed;
+    const { id, title, kind, status, summary, sourceRevision, parent, body, sources, diagramLinks } = candidate.parsed;
     documents.set(id, {
-      summary: { id, title, kind, status, summary, parent, children: children.get(id) ?? [], file: candidate.file },
+      summary: { id, title, kind, status, summary, ...(sourceRevision ? { sourceRevision } : {}), parent, children: children.get(id) ?? [], file: candidate.file },
       body,
       sources,
       diagramLinks,

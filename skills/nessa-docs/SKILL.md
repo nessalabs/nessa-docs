@@ -29,6 +29,23 @@ An immutable record can still have an explicit status. In that case a chart may
 describe the returned status changes; say that calls return a new value and name
 who saves it, rather than implying the original value changes in place.
 
+## Retain the source checkpoint
+
+Record `sourceRevision` in each state page reviewed, following the
+[file format](references/format.md#source-review-checkpoint). Use the documented
+repository's exact committed source revision, obtained with `git rev-parse HEAD`
+(or the exact base checked when source and docs share a working branch). A dirty
+implementation is not represented by HEAD alone: commit the source first or keep
+the prior checkpoint and describe the uncommitted scope explicitly.
+
+Read the existing checkpoint before refreshing a page. Compare the relevant
+source changes since that revision, then trace the current owning code and tests;
+a diff alone is not proof the explanation is correct. Advance only pages whose
+behavior was reviewed. Do not stamp an entire atlas after a partial audit, inherit
+a root revision onto children, substitute the renderer's commit, or imply a
+checkpoint is executed test evidence. Leave unknown historical checkpoints
+absent until verified. Record review scope, validation and exclusions in prose.
+
 ## Organize the map
 
 Put the system entry in `docs/state/README.md`. For larger projects, group

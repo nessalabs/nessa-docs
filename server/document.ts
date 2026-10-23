@@ -28,8 +28,8 @@ const REQUIRED_FIELDS = [
   'sources',
   'diagramLinks',
 ] as const;
-/** Optional fields: absent means their empty value. */
-const OPTIONAL_FIELDS = ['diagramDetails'] as const;
+/** Optional details default empty; an absent source revision is unknown. */
+const OPTIONAL_FIELDS = ['diagramDetails', 'sourceRevision'] as const;
 
 /** A chart element as an author names it: a state or flowchart node, or a labelled transition or edge between two of them. */
 export type DetailSelector =
@@ -50,6 +50,8 @@ export interface ParsedDocument {
   readonly kind: DocumentKind;
   readonly status: DocumentStatus;
   readonly summary: string;
+  /** Exact source commit reviewed for this page; absent is unknown, never inherited. */
+  readonly sourceRevision?: string;
   readonly parent: string | null;
   readonly sources: readonly string[];
   readonly diagramLinks: ReadonlyMap<string, string>;
@@ -161,6 +163,11 @@ function validateFields(fields: Record<string, unknown>, body: string): ParseOut
   if (Object.hasOwn(fields, 'summary') && !nonEmptyString(summary)) {
     invalid('summary', 'a non-empty string', summary);
   }
+  const sourceRevision = Object.hasOwn(fields, 'sourceRevision') ? fields.sourceRevision : undefined;
+  if (Object.hasOwn(fields, 'sourceRevision') &&
+      (typeof sourceRevision !== 'string' || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(sourceRevision))) {
+    invalid('sourceRevision', 'a quoted full lowercase Git commit ID (40 or 64 hexadecimal characters)', sourceRevision);
+  }
   const kind = fields.kind;
   if (Object.hasOwn(fields, 'kind') && !isMember(DOCUMENT_KINDS, kind)) {
     invalid('kind', `one of ${DOCUMENT_KINDS.join(', ')}`, kind);
@@ -232,6 +239,7 @@ function validateFields(fields: Record<string, unknown>, body: string): ParseOut
       kind: kind as DocumentKind,
       status: status as DocumentStatus,
       summary: (summary as string).trim(),
+      ...(typeof sourceRevision === 'string' ? { sourceRevision } : {}),
       parent: parent as string | null,
       sources,
       diagramLinks,

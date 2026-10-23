@@ -345,6 +345,16 @@ function DocumentView({ response, focusOnLoad }: { response: DocumentResponse; f
             <p className="document-meta">
               <span className="document-kind">{KIND_SINGULAR[document.kind]}</span>
               <DocumentStatusLabel status={document.status} />
+              <button
+                type="button"
+                className="meta-revision"
+                data-testid="source-revision"
+                title={document.sourceRevision ? `Source reviewed at ${document.sourceRevision}` : 'No source commit recorded for this page'}
+                onClick={openProvenance}
+                aria-controls={provenanceId}
+              >
+                {document.sourceRevision ? `Reviewed at ${document.sourceRevision.slice(0, 12)}` : 'Source revision not recorded'}
+              </button>
               {issues.length > 0 ? (
                 <button type="button" className="meta-warning" onClick={openProvenance} aria-controls={provenanceId}>
                   {issues.length} warning{issues.length === 1 ? '' : 's'}
@@ -397,6 +407,13 @@ function DocumentView({ response, focusOnLoad }: { response: DocumentResponse; f
             </summary>
             <div className="provenance-body">
               <dl>
+                <div>
+                  <dt>Source reviewed at</dt>
+                  <dd data-testid="source-revision-full">
+                    {document.sourceRevision ? <code>{document.sourceRevision}</code> : 'Not recorded for this page'}
+                    <p className="quiet">The source commit this page was reviewed against. This is not a test result or a claim that newer code is covered.</p>
+                  </dd>
+                </div>
                 <div>
                   <dt>File</dt>
                   <dd>

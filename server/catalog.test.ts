@@ -236,3 +236,27 @@ describe('loadCatalog: filesystem boundaries', () => {
     expect(few.files.reads).toHaveLength(2);
   });
 });
+
+
+describe('source review revision', () => {
+  it('publishes exact page revisions without inheriting a root checkpoint', async () => {
+    const tree = validTree();
+    const revision = 'a'.repeat(40);
+    tree[`${STATE}/README.md`] = doc('nessa', null, { sourceRevision: revision });
+    tree[`${STATE}/services/chat/send/submit.md`] = doc('chat-send-submit', 'chat-send', { sourceRevision: 'b'.repeat(64) });
+    const { catalog } = await load(tree);
+    expect(catalog.issues).toEqual([]);
+    expect(catalog.documents.get('nessa')?.summary.sourceRevision).toBe(revision);
+    expect(catalog.documents.get('chat')?.summary.sourceRevision).toBeUndefined();
+    expect(catalog.documents.get('chat-send-submit')?.summary.sourceRevision).toBe('b'.repeat(64));
+  });
+  it.each(['main', 'abcd1234', 'A'.repeat(40), 'a'.repeat(41), '', null, 123, ['a'.repeat(40)]])(
+    'rejects a non-exact revision %j rather than displaying it as reviewed', async (sourceRevision) => {
+      const tree = validTree();
+      tree[`${STATE}/README.md`] = doc('nessa', null, { sourceRevision });
+      const { catalog } = await load(tree);
+      expect(catalog.issues).toContainEqual(expect.objectContaining({ code: 'invalid-field', file: 'docs/state/README.md' }));
+      expect(catalog.rootId).toBeNull();
+    },
+  );
+});

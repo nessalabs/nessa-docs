@@ -62,6 +62,37 @@ links appear as references. HTML is not executed. A diagram uses a fenced
 `mermaid` block. It can contain at most 100,000 UTF-16 code units, including
 directives and comments. Split larger models at their actual owners.
 
+## Source review checkpoint
+
+Each page may record `sourceRevision` in its frontmatter:
+
+```yaml
+sourceRevision: "aa91831b5331d3461969f6a7be723a6d3325f29b"
+```
+
+This is the full lowercase Git commit ID (40 or 64 hexadecimal characters) of
+**the documented repository's source reviewed for that page**. Quote it so YAML
+keeps an all-numeric ID as text. Branch names, tags and short IDs are refused.
+The value is authored evidence; the browser validates its form, not whether the
+commit exists or the review was accurate.
+
+The checkpoint lives in the repository being documented, under `docs/state`.
+It is not the renderer's revision, the Markdown catalog's content hash, or the
+commit that later adds the documentation. Do not use a self-referential future
+commit ID. Record the source commit checked before committing the docs.
+
+A page without this field displays “Source revision not recorded.” It does not
+inherit a parent's or root's revision. A partial refresh advances only the pages
+reviewed; navigation edits alone do not establish a fresh behavior audit. Keep
+scope and exclusions in that page or its linked provenance notes. Do not claim
+one atlas-wide revision when older pages have not been checked.
+
+To investigate a later failure, read the page's full revision in Sources and
+provenance and compare its linked source files at that commit with the failing
+checkout. A checkpoint says what was reviewed, not that tests passed or that
+newer commits are covered. Update it only after reconciling the page's behavior
+against the newer source.
+
 ## Drill-down
 
 `diagramLinks` maps a Mermaid node ID to an accepted document ID:
