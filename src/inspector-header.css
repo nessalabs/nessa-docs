@@ -1,0 +1,56 @@
+.detail-inspector .inspector-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 8px;
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+.detail-inspector .inspector-title {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+  padding-block: 2px;
+}
+/* The title is where focus lands on opening (tabindex -1), not a control: no ring. */
+.detail-inspector .inspector-title:focus {
+  outline: none;
+}
+.detail-inspector .inspector-close {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: start;
+}
+.detail-inspector .inspector-element {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-width: 0;
+  gap: 4px 6px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: var(--text-small);
+}
+.detail-inspector .inspector-label {
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+  color: var(--ink-2);
+  font-size: var(--text-small);
+}
+.detail-inspector .inspector-open {
+  grid-column: 1 / -1;
+  justify-self: start;
+  margin-top: 8px;
+  color: var(--link);
+  font-size: var(--text-ui);
+}
+
+.detail-inspector .inspector-element { flex-wrap: nowrap; }
+.detail-inspector .inspector-kind { text-transform: none; letter-spacing: normal; font-size: var(--text-small); color: inherit; }
+.detail-inspector :is(.inspector-title, .inspector-label) { text-align: start; unicode-bidi: plaintext; }
+.detail-inspector .inspector-relation { min-width: 0; overflow-wrap: anywhere; unicode-bidi: isolate; }

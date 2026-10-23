@@ -9,7 +9,7 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { Token } from 'marked';
-import { X } from 'lucide-react';
+import { InspectorHeader } from './inspector-header';
 import type { Crumb, DiagramDetail, LinkTarget } from '../shared/api';
 import { type MarkdownSection, markdownDiagrams } from '../shared/markdown';
 import { chartAnchor, ELEMENT_NAMES } from './diagram';
@@ -17,7 +17,7 @@ import type { DiagramDetailLevel } from './diagram-detail';
 import { useEscapeLayer } from './layers';
 import { MarkdownBody } from './markdown';
 import { AppLink, documentPath } from './router';
-import { IconButton, QuietButton } from './ui';
+import { QuietButton } from './ui';
 
 export interface InspectorSelection {
   readonly key: number;
@@ -162,30 +162,9 @@ export function DetailInspector({
     >
       {selection && section && target ? (
         <div className="inspector-frame" data-detail-key={selection.key}>
-          <header className="inspector-head">
-            <p className="inspector-kind">{ELEMENT_NAMES[selection.detail.family][target.kind]}</p>
-            <h2 id={titleId} ref={heading} tabIndex={-1} className="inspector-title">
-              {section.title}
-            </h2>
-            <IconButton label="Close details" onClick={onClose} data-action="close-details" className="inspector-close">
-              <X />
-            </IconButton>
-            {target.kind === 'edge' ? (
-              <p className="inspector-element" data-testid="inspector-element">
-                <code>{target.from}</code> → <code>{target.to}</code>
-                <span className="inspector-label">{target.label}</span>
-              </p>
-            ) : (
-              <p className="inspector-element" data-testid="inspector-element">
-                <code>{target.node}</code>
-              </p>
-            )}
-            {linked ? (
-              <AppLink to={documentPath(linked.id)} className="inspector-open" data-action="open-linked-document">
-                Open {linked.title}
-              </AppLink>
-            ) : null}
-          </header>
+          <InspectorHeader titleId={titleId} headingRef={heading} title={section.title}
+            elementName={ELEMENT_NAMES[selection.detail.family][target.kind]} target={target}
+            linked={linked} onClose={onClose} />
           <div ref={scroller} className="inspector-body" tabIndex={-1} data-shown={showFull ? 'full' : 'overview'}>
             <MarkdownBody
               tokens={shown}
