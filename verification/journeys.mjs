@@ -240,7 +240,14 @@ export async function runJourneys(engine) {
     // 6d. A section link opens Details at that heading; so does a caption's "In Details".
     await page.goto(`${BASE_URL}/docs/chat-send-first#decisions-and-failure-boundaries`);
     await page.locator('#decisions-and-failure-boundaries').waitFor();
-    await page.waitForTimeout(300);
+    await waitForDiagrams(page);
+    await page.waitForFunction(() => {
+      const heading = document.getElementById('decisions-and-failure-boundaries');
+      const main = document.getElementById('main');
+      const top = Math.round(heading.getBoundingClientRect().top);
+      const atEnd = Math.abs(main.scrollHeight - main.clientHeight - main.scrollTop) <= 2;
+      return top >= 40 && (top <= 160 || (atEnd && top < 900)) && main.scrollTop > 0;
+    }, null, { timeout: 6000 });
     const anchor = await page.locator('#decisions-and-failure-boundaries').evaluate((el) => {
       const main = document.getElementById('main');
       return {

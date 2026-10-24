@@ -77,12 +77,12 @@ export async function runOnboarding(engine) {
     await form().fill(projects.A); await form().fill(picked + '/'); releasePicker(); await page.unroute('**/api/projects/pick-folder');
     c.check('F5 editing aborts authority; a late chooser answer cannot replace the field', (await form().inputValue()) === picked + '/' && (await page.getByRole('button', { name: 'Browse…' }).isEnabled()));
     await submit(); await waitForDocument(page, 'example-store');
-    c.check('F9 explicitly Open accepts picked space/Unicode/filename-whitespace folder', Boolean(handle()) && (await page.title()) === 'Example store · Nessa Docs');
+    c.check('F9 explicitly Open accepts picked space/Unicode/filename-whitespace folder', Boolean(handle()) && (await page.title()) === 'Example store · Example store Docs');
     await openForm();
     await page.getByRole('button', { name: 'Browse example' }).click();
     await waitForDocument(page, 'example-store'); await waitForDiagrams(page);
     facts.exampleHandle = handle();
-    c.check('P2 bundled example: arbitrary root ID, authored title, two working links', (await page.title()) === 'Example store · Nessa Docs' && Boolean(handle()) && (await page.locator(S.diagramNodes).count()) === 2);
+    c.check('P2 bundled example: arbitrary root ID, authored title, two working links', (await page.title()) === 'Example store · Example store Docs' && Boolean(handle()) && (await page.locator(S.diagramNodes).count()) === 2);
     await page.locator(S.diagramNode('order-lifecycle')).click(); await waitForDocument(page, 'order-lifecycle'); await waitForDiagrams(page);
     c.check('project handle stays on chart navigation and sidebar hrefs', handle() === facts.exampleHandle && new URL(await page.locator(S.treeLink('example-store')).getAttribute('href'), BASE).searchParams.get('project') === facts.exampleHandle);
     c.check('Diagrams label has no count', (await page.locator(S.viewDiagrams).innerText()).trim() === 'Diagrams');

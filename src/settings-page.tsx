@@ -1,3 +1,4 @@
+import { useDocsName } from './project-brand';
 // Settings: General (appearance, diagram detail) and Health (what the loader accepted and
 // rejected, and reading docs/state again). The tab is in the URL
 // (/settings, /settings?tab=health), so it deep-links and Back/Forward move
@@ -26,12 +27,13 @@ export function SettingsPage({
   focusOnLoad: boolean;
   projectTitle: string | null;
 }) {
+  const docsName = useDocsName();
   const tab = parseSettingsTab(useSearch());
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
-    document.title = 'Settings · Nessa Docs';
+    document.title = `Settings · ${docsName}`;
     if (focusOnLoad) heading.current?.focus({ preventScroll: true });
-  }, [focusOnLoad]);
+  }, [focusOnLoad, docsName]);
   return (
     <>
       <Titlebar current="Settings" />
