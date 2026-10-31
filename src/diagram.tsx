@@ -348,6 +348,7 @@ export function Diagram({
   selectedDetail = null,
   onSelectDetail,
   onExpandedChange,
+  onNavigateDocument,
   revealLeftOf = null,
 }: {
   source: string;
@@ -362,9 +363,13 @@ export function Diagram({
   selectedDetail?: number | null;
   onSelectDetail?: (key: number, element: Element) => void;
   onExpandedChange?: (expanded: boolean) => void;
+  /** A host can own document navigation without changing the chart renderer. */
+  onNavigateDocument?: (id: string) => void;
   /** Where the open inspector begins on screen (viewport x), when it covers the right of this chart. */
   revealLeftOf?: number | null;
 }) {
+  const navigateDocument = useRef(onNavigateDocument);
+  navigateDocument.current = onNavigateDocument;
   const appearance = useAppearance();
   const [state, setState] = useState<DiagramState>({ kind: 'rendering' });
   const [zoom, setZoom] = useState<Zoom>({ mode: 'readable' });
@@ -479,7 +484,7 @@ export function Diagram({
         } else if (target) {
           element.setAttribute('role', 'link');
           element.setAttribute('aria-label', `Open ${target.title}`);
-          activate(element, () => navigate(documentPath(target.id)));
+          activate(element, () => navigateDocument.current ? navigateDocument.current(target.id) : navigate(documentPath(target.id)));
         }
       }
     }

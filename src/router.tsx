@@ -2,6 +2,8 @@
 
 import { type AnchorHTMLAttributes, type MouseEvent, useEffect, useSyncExternalStore } from 'react';
 
+import { stored, store } from './browser-storage';
+
 export type Route =
   | { readonly kind: 'home' }
   | { readonly kind: 'document'; readonly id: string }
@@ -21,8 +23,8 @@ function entryIndex(): number {
   return typeof state?.index === 'number' ? state.index : 0;
 }
 function furthestIndex(): number {
-  const stored = Number(window.sessionStorage.getItem(FURTHEST_KEY));
-  return Number.isInteger(stored) && stored >= 0 ? stored : 0;
+  const value = Number(stored('sessionStorage', FURTHEST_KEY));
+  return Number.isInteger(value) && value >= 0 ? value : 0;
 }
 /** Scrolls to the element a `#fragment` names, if it exists. */
 export function scrollToHash(hash: string): boolean {
@@ -46,14 +48,14 @@ if (typeof window !== 'undefined') {
     if (typeof (window.history.state as { index?: unknown } | null)?.index !== 'number') {
       const index = lastIndex + 1;
       window.history.replaceState({ index }, '');
-      window.sessionStorage.setItem(FURTHEST_KEY, String(index));
+      store('sessionStorage', FURTHEST_KEY, String(index));
       notify();
     }
   });
 }
 if (typeof window !== 'undefined' && typeof (window.history.state as { index?: unknown } | null)?.index !== 'number') {
   window.history.replaceState({ index: 0 }, '');
-  window.sessionStorage.setItem(FURTHEST_KEY, '0');
+  store('sessionStorage', FURTHEST_KEY, '0');
 }
 let historySnapshot = { canGoBack: false, canGoForward: false };
 function readHistory() {
@@ -132,14 +134,14 @@ export function navigate(to: string) {
   if (url.pathname === window.location.pathname && url.search === window.location.search) {
     if (url.hash !== window.location.hash) {
       window.history.pushState({ index }, '', url.pathname + url.search + url.hash);
-      window.sessionStorage.setItem(FURTHEST_KEY, String(index));
+      store('sessionStorage', FURTHEST_KEY, String(index));
     }
     scrollToHash(url.hash);
     notify();
     return;
   }
   window.history.pushState({ index }, '', url.pathname + url.search + url.hash);
-  window.sessionStorage.setItem(FURTHEST_KEY, String(index));
+  store('sessionStorage', FURTHEST_KEY, String(index));
   notify();
 }
 

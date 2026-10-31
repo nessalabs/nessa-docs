@@ -2,13 +2,14 @@
 // the `.dark` class the Nessa UI tokens key on.
 
 import { useSyncExternalStore } from 'react';
+import { stored, store } from './browser-storage';
 
 export type Appearance = 'dark' | 'light';
 const KEY = 'nessa-state-browser:appearance';
 const listeners = new Set<() => void>();
 
 export function readAppearance(): Appearance {
-  return window.localStorage.getItem(KEY) === 'light' ? 'light' : 'dark';
+  return stored('localStorage', KEY) === 'light' ? 'light' : 'dark';
 }
 
 export function applyAppearance(appearance: Appearance) {
@@ -19,7 +20,7 @@ export function applyAppearance(appearance: Appearance) {
 }
 
 export function setAppearance(appearance: Appearance) {
-  window.localStorage.setItem(KEY, appearance);
+  store('localStorage', KEY, appearance);
   applyAppearance(appearance);
   listeners.forEach((listener) => listener());
 }

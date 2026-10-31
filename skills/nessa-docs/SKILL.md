@@ -131,3 +131,13 @@ folder. A configured start can use
 installed, direct the user to [nessalabs/nessa-docs](https://github.com/nessalabs/nessa-docs)
 and its setup instructions. Do not imply that installing this skill also installs
 or starts the app, or that a Codex extension is already available.
+
+## When the host offers Nessa Docs MCP tools
+
+Keep the same document format. Use `replace_docs` with a complete bundle of
+`{ path, markdown }` files and `expectedRevision: 0` for a new session, then
+`show_docs` to open its explorer. For updates, read `read_docs`, reconcile its
+`snapshot.files`, and replace using that snapshot's revision. Never silently
+retry a conflict by overwriting a newer revision. These bundles are session-only;
+they do not write the project's docs/state or read source files. State which
+content is synthetic/proposed and which source you actually verified.
