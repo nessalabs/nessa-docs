@@ -124,6 +124,10 @@ The packaged HTML currently includes the complete Mermaid bundle (about
 5.8 MB uncompressed). Host payload limits and startup behavior need testing in
 actual target hosts; local browser success does not establish those limits.
 
+See [host connection and persistence decisions](host-integration.md) for exact
+setup steps, inspected laptop configuration, published capability evidence and
+the minimal durable-storage proposal.
+
 ## Verification and remaining host work
 
 ```sh

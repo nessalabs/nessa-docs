@@ -22,8 +22,20 @@ const detail = z.object({ diagram: z.number().int().nonnegative(), family: z.enu
 const response = z.object({ version: z.string(), document: summary, body: z.string().max(65536), links: z.record(z.string(), target), sources: z.array(z.object({ raw: z.string(), target })), diagramLinks: z.record(z.string(), crumb), diagramDetails: z.array(detail), breadcrumbs: z.array(crumb), children: z.array(summary), issues: z.array(issue) });
 export const snapshotSchema = z.object({ files: z.array(z.object({ path: z.string(), markdown: z.string().max(65536) })).min(1).max(16), scope: z.uuid(), revision: z.number().int().positive(), catalog: z.object({ version: z.string(), rootId: id, documents: z.array(summary).min(1).max(16), issues: z.array(issue) }), documents: z.array(response).min(1).max(16) });
 
+// Zod intentionally omits __proto__ in parsed records. Authored map keys are
+// data here, so validate each value and rebuild with own data properties.
+function authoredRecord<S extends z.ZodType>(raw: unknown, schema: S): Record<string, z.infer<S>> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Invalid authored map.');
+  return Object.fromEntries(Object.entries(raw).map(([key, value]) => [key, schema.parse(value)]));
+}
+
 export function readSnapshot(value: unknown): BundleSnapshot {
-  const parsed = snapshotSchema.parse(value);
+  const shape = snapshotSchema.parse(value);
+  const raw = z.object({ documents: z.array(z.object({ links: z.unknown(), diagramLinks: z.unknown() })) }).parse(value);
+  const parsed = { ...shape, documents: shape.documents.map((doc, index) => ({ ...doc,
+    links: authoredRecord(raw.documents[index]!.links, target),
+    diagramLinks: authoredRecord(raw.documents[index]!.diagramLinks, crumb),
+  })) };
   const ids = new Set(parsed.documents.map((doc) => doc.document.id));
   if (ids.size !== parsed.documents.length || !ids.has(parsed.catalog.rootId) || parsed.catalog.documents.some((doc) => !ids.has(doc.id))) throw new Error('Inconsistent document bundle.');
   for (const doc of parsed.documents) {

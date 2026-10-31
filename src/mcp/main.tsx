@@ -10,7 +10,7 @@ import { snapshotFromResult } from '../../shared/mcp-payload';
 import '../styles.css';
 import './styles.css';
 
-const app = new App({ name: 'Nessa Docs', version: '0.1.0' }, {}, { autoResize: true });
+const app = new App({ name: 'Nessa Docs', version: '0.1.0' }, { availableDisplayModes: ['inline'] }, { autoResize: true });
 let current: BundleSnapshot | null = null;
 let publish: (snapshot: BundleSnapshot) => void = () => undefined;
 let report: (message: string) => void = () => undefined;
@@ -33,15 +33,19 @@ app.onhostcontextchanged = (context) => { if (context.theme) setAppearance(conte
 function Explorer() {
   const [snapshot, setSnapshot] = useState<BundleSnapshot | null>(current);
   const [id, setId] = useState<string | null>(null);
-  const [detailSection, setDetailSection] = useState<number | null>(null);
+  const [detailKey, setDetailKey] = useState<number | null>(null);
   const dialog = useRef<HTMLElement>(null);
-  const selection = useRef<string | null>(null);
+  const contextGeneration = useRef(0);
   const detailTrigger = useRef<Element | null>(null);
   const [fragment, setFragment] = useState<string | null>(null);
   const [view, setView] = useState<'diagrams' | 'details'>('diagrams');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  publish = (next) => { setSnapshot(next); setDetailSection(null); setError(''); };
+  publish = (next) => {
+    setSnapshot(next);
+    setId((previous) => next.documents.some((doc) => doc.document.id === previous) ? previous : next.catalog.rootId);
+    setDetailKey(null); setError('');
+  };
   report = setError;
   const doc = snapshot?.documents.find((doc) => doc.document.id === id) ?? snapshot?.documents.find((doc) => doc.document.id === snapshot.catalog.rootId);
   const tokens = useMemo(() => lexMarkdown(doc?.body ?? ''), [doc?.body]);
@@ -50,22 +54,29 @@ function Explorer() {
   const detailEntries = useMemo(() => doc?.diagramDetails.map((detail, key) => ({ key, detail })) ?? [], [doc]);
   const diagrams = useMemo(() => markdownDiagrams(tokens), [tokens]);
   const detailsByDiagram = useMemo(() => diagrams.map((_, index) => detailEntries.filter((entry) => entry.detail.diagram === index)), [diagrams, detailEntries]);
-  useEffect(() => { if (detailSection !== null) dialog.current?.focus(); }, [detailSection]);
+  const detailEntry = detailEntries.find((entry) => entry.key === detailKey);
+  const detailSection = detailEntry?.detail.section.index ?? null;
+  const detailNode = detailEntry?.detail.target.kind === 'node' ? detailEntry.detail.target.node : null;
+  const deeperPage = detailNode !== null && doc && Object.hasOwn(doc.diagramLinks, detailNode) ? doc.diagramLinks[detailNode] : undefined;
+  useEffect(() => { if (detailKey !== null) dialog.current?.focus(); }, [detailKey]);
+  useEffect(() => {
+    const generation = ++contextGeneration.current;
+    if (!snapshot || !doc || !app.getHostCapabilities()?.updateModelContext?.text) return;
+    app.updateModelContext({ content: [{ type: 'text', text: JSON.stringify({ scope: snapshot.scope, revision: snapshot.revision, documentId: doc.document.id }) }] }).catch(() => {
+      if (contextGeneration.current === generation && current?.revision === snapshot.revision) setError('The host could not share this selection with the model.');
+    });
+    return () => { contextGeneration.current++; };
+  }, [snapshot?.scope, snapshot?.revision, doc?.document.id]);
   useEffect(() => {
     if (fragment !== null) document.getElementById(fragment)?.scrollIntoView();
   }, [doc?.document.id, fragment, view]);
   const closeDetail = () => {
-    setDetailSection(null);
+    setDetailKey(null);
     if (detailTrigger.current instanceof HTMLElement || detailTrigger.current instanceof SVGElement) detailTrigger.current.focus();
   };
   const choose = (next: string) => {
     if (!snapshot?.documents.some((doc) => doc.document.id === next)) { setError('That document is outside this bundle.'); return; }
-    setDetailSection(null); setFragment(null); setId(next); selection.current = next;
-    if (app.getHostCapabilities()?.updateModelContext?.text) {
-      app.updateModelContext({ content: [{ type: 'text', text: JSON.stringify({ scope: snapshot.scope, revision: snapshot.revision, documentId: next }) }] }).catch(() => {
-        if (selection.current === next && current?.revision === snapshot.revision) setError('The host could not share this selection with the model.');
-      });
-    }
+    setDetailKey(null); setFragment(null); setId(next);
   };
   async function refresh() {
     const requested = current;
@@ -87,7 +98,10 @@ function Explorer() {
       choose(decodeURIComponent(url.pathname.slice(6))); setFragment(url.hash ? decodeURIComponent(url.hash.slice(1)) : null); setView('details');
     } else if (href.startsWith('#')) document.getElementById(decodeURIComponent(href.slice(1)))?.scrollIntoView();
     else if (/^(https?:|mailto:)/i.test(href)) {
-      app.openLink({ url: href }).then((result) => { if (result.isError) setError('The host refused to open that link.'); }, () => setError('The host could not open that link.'));
+      const requested = current;
+      const generation = contextGeneration.current;
+      const stillCurrent = () => current === requested && contextGeneration.current === generation;
+      app.openLink({ url: href }).then((result) => { if (result.isError && stillCurrent()) setError('The host refused to open that link.'); }, () => { if (stillCurrent()) setError('The host could not open that link.'); });
     }
   }
   return <main className="mcp-explorer" onClickCapture={link}>
@@ -98,10 +112,11 @@ function Explorer() {
       <article key={`${doc.document.id}:${snapshot?.revision}`}>
         <h1>{doc.document.title}</h1><p>{doc.document.summary}</p><p className="mcp-provenance">{doc.document.status}{doc.document.sourceRevision ? ` · Reviewed at ${doc.document.sourceRevision}` : ' · Source revision not recorded'}</p>
         <div role="group" aria-label="Document view"><button aria-pressed={view === 'diagrams'} onClick={() => setView('diagrams')}>Diagrams</button><button aria-pressed={view === 'details'} onClick={() => setView('details')}>Details</button></div>
-        <MarkdownBody tokens={tokens} slugs={slugs} links={doc.links} className={view === 'diagrams' && diagrams.length > 0 ? 'prose mcp-diagrams' : 'prose'} diagram={(index, source) => <Diagram key={`${index}:${source}`} index={index} source={source} links={doc.diagramLinks} onNavigateDocument={choose} details={detailsByDiagram[index]} selectedDetail={detailEntries.find((entry) => entry.detail.section.index === detailSection)?.key ?? null} onSelectDetail={(key, element) => { detailTrigger.current = element; setDetailSection(detailEntries[key]?.detail.section.index ?? null); }} />} />
+        <MarkdownBody tokens={tokens} slugs={slugs} links={doc.links} className={view === 'diagrams' && diagrams.length > 0 ? 'prose mcp-diagrams' : 'prose'} diagram={(index, source) => <Diagram key={`${index}:${source}`} index={index} source={source} links={doc.diagramLinks} onNavigateDocument={choose} details={detailsByDiagram[index]} selectedDetail={detailKey} onSelectDetail={(key, element) => { detailTrigger.current = element; setDetailKey(key); }} />} />
         {detailSection !== null && sections[detailSection] && <section ref={dialog} tabIndex={-1} role="dialog" aria-label="Diagram details" className="mcp-detail" onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); closeDetail(); } }}>
           <button onClick={closeDetail}>Close details</button>
           <h2>{sections[detailSection].title}</h2>
+          {deeperPage && <button onClick={() => choose(deeperPage.id)}>Open {deeperPage.title}</button>}
           <MarkdownBody tokens={tokens.slice(sections[detailSection].start + 1, sections[detailSection].end)} slugs={slugs} links={doc.links} diagram={(_, source) => <pre>{source}</pre>} />
         </section>}
         {doc.issues.length > 0 && <details><summary>Document warnings ({doc.issues.length})</summary>{doc.issues.map((issue, i) => <p key={i}>{issue.message}</p>)}</details>}

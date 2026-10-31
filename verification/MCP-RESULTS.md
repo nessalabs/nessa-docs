@@ -8,12 +8,12 @@ GitHub main because the laptop's extension checkout was behind it.
 | Check | Result |
 | --- | --- |
 | `npm run typecheck` | Pass (client/shared/server) |
-| `npm test` | 185 tests pass across 23 files |
+| `npm test` | 188 tests pass across 24 files |
 | `npm run build` | Pass for standalone client, embedded HTML and server |
 | `node verification/mcp-protocol.mjs` | Pass: real official SDK stdio client; create/read/show, negotiation, errors, conflict, resource/CSP, text fallback |
 | `npm run verify:mcp` | Pass: protocol plus Chromium/WebKit sandboxed UI journeys |
 | `npm run verify:browser` | Pass: 1,138/1,138 available fixture checks across 20 engine/script results |
-| Official MCP Inspector CLI `tools/list --strict` | 0 errors, 18 warnings for legal nullable output types (`["string", "null"]`) and portability to other schema dialects |
+| Official MCP Inspector CLI `tools/list --strict` | 0 errors, 0 portability warnings; nullable schema types use equivalent anyOf branches |
 | `npm audit` | 0 vulnerabilities after compatible dependency updates |
 | `git diff --check` | Pass |
 
@@ -59,6 +59,17 @@ The 5.8 MB HTML payload also needs testing against actual host limits.
 Optional pre-existing atlas and stale-build browser checks were skipped because
 no real atlas URL or older build was supplied. All fixture checks ran.
 
-Self-review and the React/accessibility checklist were completed. An independent
-second reviewer has not reviewed this patch; it is ready for the parent thread's
-review. No GitHub issue/PR, push, merge, approval or deployment was performed.
+Self-review, the React/accessibility checklist and independent code/security/design
+review were completed. The independent reviewer found four P2 issues in the
+initial commit: shared explanation selection, missing deeper navigation,
+stale refresh selection/context and dropped authored `__proto__` keys. Those
+were fixed with Chromium/WebKit regressions. Re-review also caught inherited
+special-key lookup in the new dialog action; an own-property guard and a
+`constructor` detail-only regression fix it. Stale link-refusal callbacks are
+guarded as well. The reviewer independently reran the focused schema/payload
+checks (4/4) and reported no remaining blocking findings in the reviewed diff.
+No GitHub issue/PR, push, merge, approval or deployment was performed.
+
+Exact host transports, read-only configuration findings, pending setup actions,
+payload-bound evidence and a minimal durable-storage design are recorded in
+[host integration](../docs/host-integration.md).

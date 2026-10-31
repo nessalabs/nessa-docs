@@ -63,6 +63,7 @@ try {
       const frame = page.frameLocator('iframe');
       await frame.getByRole('heading', {name:'Example store',exact:true}).waitFor().catch(async(error)=>{ console.error(errors, await page.evaluate(()=>window.messages)); throw error; });
       await frame.locator('figure[data-state=rendered] svg').first().waitFor();
+      assert.deepEqual(await page.evaluate(() => window.messages.find(message => message.method === 'ui/initialize').params.appCapabilities.availableDisplayModes), ['inline']);
       assert.equal(await page.frames()[1].evaluate(() => {try { return parent.document.title; } catch { return 'blocked'; }}), 'blocked');
       assert.equal(await page.frames()[1].evaluate(async (url) => {try { await fetch(url); return true; } catch { return false; }}, url + '/shown'), false);
       await frame.getByRole('button', {name:'Zoom in',exact:true}).first().click();
@@ -97,12 +98,48 @@ try {
       const forged = structuredClone(changed); forged.structuredContent.snapshot.scope = '00000000-0000-4000-8000-000000000000';
       await page.evaluate((result) => window.pushResult(result), forged);
       await frame.getByRole('alert').filter({hasText:'different document session'}).waitFor();
+      const inspected = files.map((file, i) => i ? file : { ...file, markdown: file.markdown
+        .replace('  Orders: order-lifecycle', '  Orders: order-lifecycle\n  __proto__: order-lifecycle')
+        .replace('\n---\n', '\ndiagramDetails:\n  - diagram: 0\n    node: Orders\n    section: Shared explanation\n  - diagram: 0\n    node: Payments\n    section: Shared explanation\n  - diagram: 0\n    node: constructor\n    section: Shared explanation\n---\n')
+        .replace('Caller[Person placing an order] --> Orders[Order decisions]', 'Caller[Person placing an order] --> Orders[Order decisions]\n    __proto__[Special node] --> Orders\n    constructor[Unlinked special node] --> Orders') + '\n## Shared explanation\n\nBoth parts share this explanation.\n' });
+      let latest = (await client.callTool({name:'read_docs',arguments:{}})).structuredContent.snapshot.revision;
+      const reviewed = await client.callTool({name:'replace_docs',arguments:{expectedRevision:latest,files:inspected}});
+      assert(!reviewed.isError, JSON.stringify(reviewed));
+      await frame.getByRole('button',{name:'Refresh',exact:true}).click();
+      await frame.getByText(`Revision ${latest+1} · session only`,{exact:true}).waitFor();
+      await frame.getByRole('button',{name:'Diagrams',exact:true}).click();
+      const payments = frame.getByRole('button',{name:'Details: Payments (also opens Payment provider boundary)',exact:true});
+      await payments.click();
+      assert.equal(await payments.getAttribute('aria-expanded'),'true');
+      assert.equal(await frame.getByRole('button',{name:'Details: Orders (also opens Submit or cancel an order)',exact:true}).getAttribute('aria-expanded'),'false');
+      await frame.getByRole('button',{name:'Close details',exact:true}).click();
+      await frame.getByRole('button',{name:'Details: constructor',exact:true}).click();
+      assert.equal(await frame.getByRole('dialog',{name:'Diagram details'}).getByRole('button',{name:/^Open /}).count(),0,'An inherited object property is not an authored deeper-page link');
+      await frame.getByRole('button',{name:'Close details',exact:true}).click();
+      await payments.click();
+      await frame.getByRole('button',{name:'Open Payment provider boundary',exact:true}).click();
+      await frame.getByRole('heading',{name:'Payment provider boundary',exact:true}).waitFor();
+      await frame.getByRole('button',{name:'Example store',exact:true}).click();
+      await frame.getByRole('link',{name:'Open Submit or cancel an order',exact:true}).click();
+      await frame.getByRole('heading',{name:'Submit or cancel an order',exact:true}).waitFor();
+      latest = reviewed.structuredContent.snapshot.revision;
+      const rootOnly = [{path:'docs/state/README.md',markdown:'---\nid: example-store\ntitle: Example store\nkind: system\nstatus: fixture\nsummary: Root only for refresh verification.\nparent: null\nsources: []\ndiagramLinks: {}\n---\n# Example store\n\nRoot only.\n'}];
+      const reduced = await client.callTool({name:'replace_docs',arguments:{expectedRevision:latest,files:rootOnly}});
+      assert(!reduced.isError);
+      await frame.getByRole('button',{name:'Refresh',exact:true}).click();
+      await frame.getByRole('heading',{name:'Example store',exact:true}).waitFor();
+      await page.waitForFunction(revision => {const messages=window.messages.filter(message=>message.method==='ui/update-model-context'); const last=messages.at(-1);return last && JSON.parse(last.params.content[0].text).documentId==='example-store' && JSON.parse(last.params.content[0].text).revision===revision;}, latest+1);
+      const restored = await client.callTool({name:'replace_docs',arguments:{expectedRevision:latest+1,files:inspected}});
+      assert(!restored.isError);
+      await frame.getByRole('button',{name:'Refresh',exact:true}).click();
+      await frame.getByText(`Revision ${latest+2} · session only`,{exact:true}).waitFor();
+      assert(await frame.getByRole('heading',{name:'Example store',exact:true}).isVisible(),'Removed selection must not reappear when a later bundle restores that ID');
       await page.setViewportSize({width:390,height:850});
       assert(await page.frames()[1].evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
       await mkdir(new URL('./results/screenshots/',import.meta.url),{recursive:true});
       await page.screenshot({path:new URL(`./results/screenshots/mcp-${name}.png`,import.meta.url).pathname,fullPage:true});
       assert.deepEqual(errors, []);
-      outcomes.push({engine:name,ok:true,checks:['opaque sandbox handshake','parent DOM and network denied','model selection context','chart render/zoom/navigation','details','chart explanation','refresh','HTML injection','host refusal','stale result','cross-session refusal','mobile width']});
+      outcomes.push({engine:name,ok:true,checks:['opaque sandbox handshake','parent DOM and network denied','model selection context','chart render/zoom/navigation','details','chart explanation','shared explanation selection','explanation navigation','reserved authored keys','detail-only reserved node','refresh selection/context reconciliation','refresh','HTML injection','host refusal','stale result','cross-session refusal','mobile width']});
     } finally { await browser.close(); }
   }
   assert(calls.every((name)=>name==='read_docs'));

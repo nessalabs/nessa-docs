@@ -2,11 +2,12 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { getUiCapability, registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { z } from 'zod';
 import { snapshotSchema } from '../../shared/mcp-payload.js';
+import { portableSchema } from './schema.js';
 import { DocumentBundle, bundleInput } from './bundle.js';
 import type { BundleSnapshot } from '../../shared/mcp.js';
 
 export const UI_URI = 'ui://nessa-docs/explorer-v1.html';
-const outputSchema = z.object({ snapshot: snapshotSchema });
+const outputSchema = portableSchema(z.object({ snapshot: snapshotSchema }));
 const readOnly = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 function result(snapshot: BundleSnapshot) {
   return {
