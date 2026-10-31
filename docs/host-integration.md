@@ -8,7 +8,7 @@ host capabilities from the local checks performed for this patch.
 | Host | Documented connection | UI support established by the source | Tested here |
 | --- | --- | --- | --- |
 | ChatGPT | Public HTTPS streamable HTTP endpoint, or Secure MCP Tunnel to a private stdio/HTTP server; create/install a custom MCP plugin | MCP Apps iframe UI explicitly documented | No actual installation/session; local protocol/browser harness only |
-| Codex CLI/TUI | Local stdio or streamable HTTP, configured by CLI/TOML; `/mcp` lists active servers | Tools documented; no iframe/chart surface documented | SDK stdio equivalent tested; no Codex model turn run |
+| Codex CLI/TUI | Local stdio or streamable HTTP, configured by CLI/TOML; `/mcp` lists active servers | Tools documented; no iframe/chart surface documented | Actual Codex app-server calls pass; model selected tools but writes blocked by CLI approval policy |
 | Codex IDE extension | MCP server settings: stdio or streamable HTTP, then restart extension | MCP tools documented; these sources do not establish MCP Apps rendering | Not installed/tested |
 | Codex desktop app | Account/plugin availability depends on the actual app/version | Current shared plugin quickstart says optional UI in ChatGPT; it is insufficient evidence for every Codex desktop surface | Unknown until the actual host advertises Apps capability and renders the resource |
 
@@ -31,8 +31,8 @@ Sources:
 
 ## Read-only inspection of this laptop
 
-The current `~/.codex/config.toml` contains eight MCP server sections and no
-Nessa Docs entry. Unrelated server endpoints, environment values and credentials
+After the user approved registration, `~/.codex/config.toml` now contains an enabled
+`nessa-docs` stdio entry. Unrelated server endpoints, environment values and credentials
 were not printed or used. Installed Codex is `codex-cli 0.155.1`. The installed `codex mcp add --help` confirms the
 stdio and streamable-HTTP forms. `tunnel-client` was not found on PATH; this does
 not prove that no tunnel exists in the user's Platform organization. The known per-user tunnel-client config/state locations and Homebrew service
@@ -40,26 +40,52 @@ profile were absent. A read-only visit to Platform tunnel settings reached the
 sign-in page in the available browser, so existing organization tunnels and
 workspace associations could not be verified. No login, credential entry,
 provisioning, grants or connection changes were performed.
-No persistent connection, security setting or credential was created/changed.
+Only the approved local Nessa Docs connection was added. No tunnel, plugin,
+credential or security policy was changed.
 
 ## Exact next connection actions
 
 ### Local Codex tool test
 
-The supported persistent setup is:
+Registration completed with the user's explicit approval:
 
 ```sh
-codex mcp add nessa-docs -- node /absolute/checkout/dist/server/server/mcp/main.js
+codex mcp add nessa-docs -- /opt/homebrew/bin/node /Users/nessa/Documents/Codex/2026-10-31/task/nessa-docs/dist/server/server/mcp/main.js
 ```
 
-This changes Codex's MCP configuration. It needs approval to register/enable this
-specific command; it needs no provider API key or public listener. After saving,
-start/reload the applicable Codex surface, inspect `/mcp` in the CLI, and ask it
-to send the synthetic `examples/mcp/replace-docs.json` input, call `show_docs`,
-then modify one page at the returned revision. Record actual selected tools,
-arguments and output. For an iframe-capable desktop surface, additionally record
-the initialize capability, HTML load, chart interaction, CSP and reconnect.
-A successful CLI tool call still does not verify an embedded chart UI.
+`codex mcp get nessa-docs --json` confirms enabled stdio, that exact Node/build
+path, and no environment overrides. Storage remains memory-only.
+
+Actual `codex-cli 0.155.1 app-server` discovery connected and exposed all three
+tools. Its `mcpServer/tool/call` RPC created synthetic revision 1, showed the
+same scope, updated to revision 2, rejected a stale revision-1 write, and read
+the updated text. This is actual Codex runtime routing, without model selection.
+The test client advertised no Apps capability: no UI metadata/resources were
+returned. This verifies the text/structured fallback only.
+
+A separate ephemeral `codex exec` model turn selected `read_docs`,
+`replace_docs`, and `show_docs` in the requested order. Both writes failed with
+**“MCP tool call requires approval, but approval policy is never”**. Empty reads
+and shows returned the expected empty-bundle error. No approval policy was
+changed or blocked write retried; model-driven create/update remains blocked.
+This host error is an approval-policy refusal, not proof that an automatic
+reviewer evaluated or rejected the document content.
+
+The desktop automation inventory exposes a Codex MCP Apps surface, but it had
+no app tabs. This does not establish whether that desktop version supports this
+registered server's iframe UI. Desktop rendering, chart interaction and reload
+remain unverified. A successful CLI call is not embedded-chart verification.
+
+`verification/codex-host.mjs` is an explicit opt-in runtime harness for an
+already registered memory-mode server in this checkout. Set
+`NESSA_DOCS_CODEX_OVERRIDES` to a reviewed JSON argv file containing only paired
+`-c`, `mcp_servers.<other-server>.enabled=false` entries to isolate unrelated
+configured servers for the test process. It never edits registration or approval
+policy; generated plugin servers may not support configuration overrides.
+`NESSA_DOCS_CODEX_BINARY` optionally selects the installed Codex binary.
+Synthetic results are retained at `verification/results/codex-host.json` and
+`verification/results/codex-model-host.jsonl`. Re-running requires Codex's normal
+local state-directory access; no alternate credentials/state directory is used.
 
 ### Private ChatGPT UI test
 
@@ -141,5 +167,5 @@ tools. Current/previous generation paths are snapshots, not a stable live
 standalone directory; read/refresh for the current path before opening it.
 
 Remote/multi-user persistence still requires authentication and storage keyed by
-the authenticated owner before bundle ID. No remote service or host connection
-was configured by this implementation.
+the authenticated owner before bundle ID. No remote service was configured. The approved Codex stdio registration uses
+memory mode; it does not select the synthetic durable demo or real user docs.

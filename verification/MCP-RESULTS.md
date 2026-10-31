@@ -21,7 +21,8 @@ GitHub main because the laptop's extension checkout was behind it.
 The repository has no separate lint script. Vite emits existing future
 config-loader warnings about extensionless imports; these are not failures.
 The initial test run lacked sandbox loopback permission; the authorized rerun
-passed. No automatic approval rejection remains outstanding.
+passed. The later actual-host model test is blocked by its CLI approval policy, as
+described below.
 
 The browser harness uses an opaque iframe with only `allow-scripts`, no external
 connection/resource/frame domains and no browser permissions. It checks parent
@@ -103,3 +104,20 @@ A synthetic saved demo remains outside the checkout in this task's owned
 `../nessa-docs-durable-demo.json`. The MCP process is stopped and its lock has
 been released; no host was registered. This generated sample is not a user's
 source project. Its current generation can be opened in the standalone app.
+
+## Actual Codex host follow-up
+
+The approved local `nessa-docs` registration is enabled and memory-only. Fresh
+build passed. `codex-cli 0.155.1 app-server` discovered the installed server and
+routed create/show/update/read calls, with revisions 1→2 and stale-write rejection.
+`verification/codex-host.mjs` records synthetic evidence in
+`results/codex-host.json`. This test explicitly does not claim model selection
+or UI rendering.
+
+The separate ephemeral model turn selected all three tools. Both writes were
+blocked: “MCP tool call requires approval, but approval policy is never”. It
+therefore only observed empty-bundle errors; no policy was changed or blocked
+write retried. `results/codex-model-host.jsonl` retains the actual tool events.
+Desktop MCP Apps inventory had no tabs; actual embedded rendering remains
+unverified. See [host integration](../docs/host-integration.md) for the exact
+installed command, reproducible runtime harness and remaining host requirements.
