@@ -35,8 +35,11 @@ The current `~/.codex/config.toml` contains eight MCP server sections and no
 Nessa Docs entry. Unrelated server endpoints, environment values and credentials
 were not printed or used. Installed Codex is `codex-cli 0.155.1`. The installed `codex mcp add --help` confirms the
 stdio and streamable-HTTP forms. `tunnel-client` was not found on PATH; this does
-not prove that no tunnel exists in the user's Platform organization. Account
-roles, tunnel enrollment and runtime credentials have not been inspected.
+not prove that no tunnel exists in the user's Platform organization. The known per-user tunnel-client config/state locations and Homebrew service
+profile were absent. A read-only visit to Platform tunnel settings reached the
+sign-in page in the available browser, so existing organization tunnels and
+workspace associations could not be verified. No login, credential entry,
+provisioning, grants or connection changes were performed.
 No persistent connection, security setting or credential was created/changed.
 
 ## Exact next connection actions
@@ -66,9 +69,10 @@ server or public tunnel is necessary. The concrete steps are:
 1. Select the Platform organization and target ChatGPT workspace. Creating a
    tunnel requires **Tunnels Read + Manage**; running/selecting it requires
    **Tunnels Read + Use**. The tunnel must include the target workspace.
-2. Obtain developer-mode access under the workspace's policy. The user enables
-   it in Settings → Security and login where applicable. This is a separate
-   permission from Platform tunnel roles.
+2. Obtain permission to add and use custom MCP servers under the target
+   workspace's current policy. This is separate from Platform tunnel roles.
+   If the host requires an additional security/developer setting, have the user
+   review that specific change; do not silently enable it.
 3. Create/select a tunnel in Platform tunnel settings. Obtain a runtime API key
    through the approved credential flow; explicitly settle reuse versus new.
    Never place the key in repo files, tool arguments or screenshots.
@@ -112,7 +116,11 @@ The checked official UI guide, UI reference, quickstart and troubleshooting
 pages do **not publish a numeric HTML-resource byte ceiling**. This research
 therefore cannot classify 5.78 MB as within or beyond an actual ChatGPT/Codex
 limit. A plugin ZIP limit or API file-upload limit would measure a different
-thing and is not used here. Host acceptance remains unverified.
+thing and is not used here. Host acceptance remains unverified. The current official Secure MCP Tunnel
+limits section separately documents **10 MiB for the complete serialized
+request/response envelope**, including headers/protocol metadata, and a
+**120-second end-to-end deadline**. The measured resource JSON is about 5.84 MB;
+that is not a measured complete tunnel envelope or a successful host load.
 
 The build includes all Mermaid diagram families. Keep that behavior for this
 patch; dropping chart families would change the authored-document contract.
@@ -122,33 +130,16 @@ renderer for the documented chart families, or audited hosted assets with exact
 CSP domains and explicit hosting approval. Do not fetch model-specified scripts
 or weaken CSP to work around a limit.
 
-## Minimal durable option — design only
+## Durable local bundles
 
-Today the bundle is process-scoped, shared by callers of that stdio process,
-and lost on restart. It is not conversation-scoped, tenant storage or a durable
-project. `snapshot.files` contains the authored Markdown needed to reconstruct
-it, but is not itself persisted by this adapter.
+Memory is still the default. The implemented opt-in owner is described in
+[durable bundles](durable-bundles.md): absolute startup-selected directory,
+private modes, a persistent scope, full catalog/hash validation on restore,
+one atomically renamed current/previous manifest, explicit uncertainty and
+writer-lock draining on shutdown. No source project is selected or modified by
+tools. Current/previous generation paths are snapshots, not a stable live
+standalone directory; read/refresh for the current path before opening it.
 
-The smallest local durable owner can preserve the existing standalone format:
-
-- The operator selects one application-owned storage directory at process
-  startup; model tools cannot choose arbitrary laptop paths.
-- Validate a full bundle using the existing virtual catalog, then write one
-  generation directory containing exactly its `docs/state/*.md` files.
-- Commit a versioned manifest (scope, revision, active generation, content hash)
-  with a same-directory temporary file and atomic rename, with fsync ordering.
-  A single writer lock prevents two processes from racing the same store.
-- Publish tool success only after that manifest is durable. On restart rebuild
-  the catalog from the committed generation and restore its scope/revision;
-  ignore incomplete generations. A lost acknowledgement is resolved by reading
-  the committed revision before retrying.
-- Bound retained generations and recover orphaned temporary data under that
-  owned directory only. Reject symlink/path escapes at the actual reads/writes.
-- The standalone browser can open the committed generation as an ordinary
-  project: it already contains `docs/state/README.md`. Parsing, diagram rendering
-  and document semantics remain shared, with raw Markdown as the authority.
-
-This is not implemented and creates no disk access to real user documents.
-Remote/multi-user persistence additionally requires authentication and storage
-keyed by the authenticated owner before bundle ID. The unauthenticated stdio
-adapter must not become a shared remote document service.
+Remote/multi-user persistence still requires authentication and storage keyed by
+the authenticated owner before bundle ID. No remote service or host connection
+was configured by this implementation.

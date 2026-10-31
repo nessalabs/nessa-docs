@@ -135,9 +135,14 @@ or starts the app, or that a Codex extension is already available.
 ## When the host offers Nessa Docs MCP tools
 
 Keep the same document format. Use `replace_docs` with a complete bundle of
-`{ path, markdown }` files and `expectedRevision: 0` for a new session, then
+`{ path, markdown }` files and `expectedRevision: 0` for an empty bundle, then
 `show_docs` to open its explorer. For updates, read `read_docs`, reconcile its
 `snapshot.files`, and replace using that snapshot's revision. Never silently
-retry a conflict by overwriting a newer revision. These bundles are session-only;
-they do not write the project's docs/state or read source files. State which
+retry a conflict by overwriting a newer revision. Memory mode is session-only. If the operator selected `NESSA_DOCS_STORE` at
+startup, generated Markdown is saved only under that dedicated store and survives
+restart. Read `read_docs` after reconnecting; a saved revision does not reset to
+zero. A save-unconfirmed error may have committed, so read/reconcile before
+retrying. Managed generation paths are standalone snapshots with bounded
+retention; read for the latest path before opening. Tools never choose arbitrary
+paths, write into a source project's docs/state or read source files. State which
 content is synthetic/proposed and which source you actually verified.

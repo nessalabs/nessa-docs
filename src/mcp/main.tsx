@@ -105,7 +105,8 @@ function Explorer() {
     }
   }
   return <main className="mcp-explorer" onClickCapture={link}>
-    <header><strong>Nessa Docs</strong><span>{snapshot ? `Revision ${snapshot.revision} · session only` : 'Connecting to documents…'}</span><button disabled={busy || !snapshot} onClick={refresh}>{busy ? 'Refreshing…' : 'Refresh'}</button></header>
+    <header><strong>Nessa Docs</strong><span>{snapshot ? `Revision ${snapshot.revision} · ${snapshot.storage.kind === 'memory' ? 'session only' : snapshot.storage.status === 'synced' ? 'saved locally' : 'save unconfirmed'}` : 'Connecting to documents…'}</span><button disabled={busy || !snapshot} onClick={refresh}>{busy ? 'Refreshing…' : 'Refresh'}</button></header>
+    {snapshot?.storage.kind === 'durable' && <p className="mcp-provenance">Standalone snapshot (refresh for current path): <code>{snapshot.storage.projectPath}</code></p>}
     {error && <p role="alert">{error}</p>}
     {!doc ? <p role="status">Ask the model to create a document bundle, then show it here.</p> : <>
       <nav aria-label="Documents">{snapshot?.catalog.documents.map((entry) => <button key={entry.id} aria-current={entry.id === doc.document.id ? 'page' : undefined} onClick={() => choose(entry.id)}>{entry.title}</button>)}</nav>

@@ -20,7 +20,8 @@
     "validate:docs": "npm run build:server --silent && node dist/server/server/project-opening/validate-cli.js",
     "build:mcp": "vite build --config vite.mcp.config.ts",
     "start:mcp": "node dist/server/server/mcp/main.js",
-    "verify:mcp": "node verification/mcp-protocol.mjs && node verification/mcp-browser.mjs"
+    "verify:mcp": "node verification/mcp-protocol.mjs && node verification/mcp-browser.mjs",
+    "verify:durable": "node verification/mcp-durable.mjs"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",

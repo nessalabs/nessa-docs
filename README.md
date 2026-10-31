@@ -7,7 +7,8 @@ those maps locally. Your coding agent writes Markdown in your project's
 This repository contains the **nessa-docs authoring skill** and the **local web
 app**. It works with any project; it does not need the Nessa agent backend.
 The standalone app is a website running on your computer. An optional
-[MCP Apps adapter](docs/mcp-app.md) lets models create transient document bundles
+[MCP Apps adapter](docs/mcp-app.md) lets models create document bundles with memory mode by default and
+[opt-in local saving](docs/durable-bundles.md)
 and display the shared explorer in compatible hosts. Actual ChatGPT/Codex host
 installation and UI support still need host-specific verification.
 

@@ -1,5 +1,5 @@
-// One stdio connection owns one transient bundle. Validation builds a candidate
-// without filesystem access; compare-and-swap publishes it only if still current.
+// One owner validates complete bundles. Optional persistence commits before
+// publication; uncertain disk effects are explicit rather than guessed away.
 import { randomUUID } from 'node:crypto';
 import { posix } from 'node:path';
 import { z } from 'zod';
@@ -9,11 +9,26 @@ import type { RepositoryFiles } from '../files.js';
 import type { DocumentResponse } from '../../shared/api.js';
 import type { BundleSnapshot } from '../../shared/mcp.js';
 
+export const bundlePath = z.string().max(200).regex(/^docs\/state\/(?:[a-zA-Z0-9_-]+\/)*(?:README|[a-zA-Z0-9_-]+)\.md$/);
+const authoredMarkdown = z.string().max(65536).refine((text) => Buffer.from(text, 'utf8').toString('utf8') === text, 'Markdown must contain well-formed Unicode that round-trips as UTF-8.');
+const authoredFiles = z.array(z.object({ path: bundlePath, markdown: authoredMarkdown }).strict()).min(1).max(16);
+export const storedBundleSchema = z.object({ scope: z.uuid(), revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER), files: authoredFiles }).strict();
+export type StoredBundle = z.infer<typeof storedBundleSchema>;
+export type CommitOutcome =
+  | { readonly kind: 'committed'; readonly durable: boolean; readonly projectPath: string }
+  | { readonly kind: 'unchanged'; readonly message: string }
+  | { readonly kind: 'unknown'; readonly message: string };
+export interface BundlePersistence {
+  readonly scope: string;
+  load(): Promise<{ readonly state: StoredBundle; readonly projectPath: string } | null>;
+  commit(state: StoredBundle, signal?: AbortSignal): Promise<CommitOutcome>;
+}
+
 export const bundleInput = z.object({
-  expectedRevision: z.number().int().min(0).describe('0 for a new session; otherwise the revision returned by the last successful replace or read.'),
+  expectedRevision: z.number().int().min(0).describe('0 only for an empty bundle; otherwise read_docs returns the current revision, including after a durable-store restart.'),
   files: z.array(z.object({
-    path: z.string().max(200).regex(/^docs\/state\/(?:[a-zA-Z0-9_-]+\/)*(?:README|[a-zA-Z0-9_-]+)\.md$/).describe('Bundle-relative path. Include docs/state/README.md as the system root.'),
-    markdown: z.string().max(65536).describe('Complete Nessa Docs Markdown including YAML frontmatter: id, title, kind, status, summary, parent, sources, diagramLinks. Use status fixture/proposed for synthetic content; Mermaid fences hold diagrams.'),
+    path: bundlePath.describe('Bundle-relative path. Include docs/state/README.md as the system root.'),
+    markdown: authoredMarkdown.describe('Complete Nessa Docs Markdown including YAML frontmatter: id, title, kind, status, summary, parent, sources, diagramLinks. Use status fixture/proposed for synthetic content; Mermaid fences hold diagrams.'),
   }).strict()).min(1).max(16),
 }).strict();
 
@@ -42,37 +57,71 @@ function bundleFiles(entries: readonly { path: string; markdown: string }[]): Re
 }
 
 export class DocumentBundle {
-  private readonly scope = randomUUID();
+  private readonly scope: string;
   private revision = 0;
   private validating = false;
+  private unavailable: string | null = null;
   private snapshot: BundleSnapshot | null = null;
 
+  constructor(private readonly persistence?: BundlePersistence) { this.scope = persistence?.scope ?? randomUUID(); }
+
+  static async open(persistence: BundlePersistence): Promise<DocumentBundle> {
+    const owner = new DocumentBundle(persistence);
+    const restored = await persistence.load();
+    if (restored) {
+      const state = storedBundleSchema.parse(restored.state);
+      if (state.scope !== owner.scope) throw new Error('Stored bundle belongs to a different store.');
+      owner.snapshot = await owner.build(state.files, state.revision, { kind: 'durable', status: 'synced', projectPath: restored.projectPath });
+      owner.revision = state.revision;
+    }
+    return owner;
+  }
+
   read(): BundleSnapshot {
+    if (this.unavailable) throw new Error(this.unavailable);
     if (!this.snapshot) throw new Error('No documents yet. Call replace_docs with expectedRevision 0 first.');
     return this.snapshot;
   }
 
+  private async build(entries: StoredBundle['files'], revision: number, storage: BundleSnapshot['storage']): Promise<BundleSnapshot> {
+    if (new Set(entries.map((file) => file.path)).size !== entries.length) throw new Error('Duplicate bundle paths are not allowed.');
+    if (entries.reduce((total, file) => total + Buffer.byteLength(file.markdown), 0) > 256 * 1024) throw new Error('Bundle exceeds 256 KiB.');
+    const files = bundleFiles(entries);
+    const catalog = await loadCatalog(files, '/bundle');
+    if (!catalog.rootId || catalog.issues.some((issue) => issue.severity === 'error')) {
+      throw new Error(`Invalid document bundle: ${catalog.issues.map((issue) => `${issue.file}: ${issue.message}`).join('; ').slice(0, 4000)}`);
+    }
+    const documents = await Promise.all([...catalog.documents.keys()].map((id) => documentResponse(catalog, id, files)));
+    const accepted = documents.filter((document): document is DocumentResponse => !('error' in document));
+    return { files: entries, scope: this.scope, revision, storage, catalog: catalogResponse(catalog), documents: accepted };
+  }
+
   async replace(raw: unknown, signal?: AbortSignal): Promise<BundleSnapshot> {
     signal?.throwIfAborted();
+    if (this.unavailable) throw new Error(this.unavailable);
     const input = bundleInput.parse(raw);
     if (input.expectedRevision !== this.revision) throw new Error(`Revision conflict. Current revision is ${this.revision}; read and reconcile before retrying.`);
-    if (new Set(input.files.map((file) => file.path)).size !== input.files.length) throw new Error('Duplicate bundle paths are not allowed.');
-    if (input.files.reduce((total, file) => total + Buffer.byteLength(file.markdown), 0) > 256 * 1024) throw new Error('Bundle exceeds 256 KiB.');
+    if (this.revision === Number.MAX_SAFE_INTEGER) throw new Error('Revision limit reached. Start a new document store.');
     if (this.validating) throw new Error('A replacement is already being validated. Read and retry after it finishes.');
     this.validating = true;
     try {
-      const files = bundleFiles(input.files);
-      const catalog = await loadCatalog(files, '/bundle');
-      if (!catalog.rootId || catalog.issues.some((issue) => issue.severity === 'error')) {
-        throw new Error(`Invalid document bundle: ${catalog.issues.map((issue) => `${issue.file}: ${issue.message}`).join('; ').slice(0, 4000)}`);
-      }
-      const documents = await Promise.all([...catalog.documents.keys()].map((id) => documentResponse(catalog, id, files)));
-      if (input.expectedRevision !== this.revision) throw new Error(`Revision conflict. Current revision is ${this.revision}; read and reconcile before retrying.`);
+      let snapshot = await this.build(input.files, this.revision + 1, { kind: 'memory' });
       signal?.throwIfAborted();
-      const accepted = documents.filter((document): document is DocumentResponse => !('error' in document));
-      const snapshot: BundleSnapshot = { files: input.files, scope: this.scope, revision: this.revision + 1, catalog: catalogResponse(catalog), documents: accepted };
+      let unconfirmed = false;
+      if (this.persistence) {
+        const outcome = await this.persistence.commit({ files: input.files, scope: this.scope, revision: snapshot.revision }, signal);
+        if (outcome.kind === 'unchanged') throw new Error(outcome.message);
+        if (outcome.kind === 'unknown') {
+          this.unavailable = 'Durable commit outcome is unknown. Stop and reopen the store before reading or writing again.';
+          throw new Error(this.unavailable);
+        }
+        unconfirmed = !outcome.durable;
+        snapshot = { ...snapshot, storage: { kind: 'durable', status: outcome.durable ? 'synced' : 'unconfirmed', projectPath: outcome.projectPath } };
+      }
+      // After a manifest is published, cancellation cannot turn it into rollback.
       this.snapshot = snapshot;
       this.revision = snapshot.revision;
+      if (unconfirmed) throw new Error(`Revision ${snapshot.revision} is visible, but durable sync was not confirmed. Read and reconcile before retrying.`);
       return snapshot;
     } finally { this.validating = false; }
   }

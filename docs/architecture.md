@@ -58,7 +58,9 @@ bindings, rather than inferred labels, decide which element has depth.
 ## Optional MCP Apps adapter
 
 `server/mcp` composes the catalog with a closed, in-memory RepositoryFiles
-adapter and a stdio MCP server. `src/mcp` uses the existing Markdown/diagram
+adapter and a stdio MCP server. Its optional `durable-store.ts` adapter stores
+only generated Markdown in an explicitly selected private directory, with one
+manifest and a drained exclusive writer lock. Memory mode remains the default. `src/mcp` uses the existing Markdown/diagram
 renderer with host-owned navigation and the standard MCP Apps bridge. The
 standalone filesystem/HTTP composition is independent. `shared/mcp-payload.ts`
 validates the structured payload at both sides of the protocol boundary.

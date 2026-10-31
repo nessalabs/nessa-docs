@@ -5,7 +5,9 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium, webkit } from 'playwright';
 import { connectDocs, sampleFiles } from './mcp-protocol.mjs';
 console.error('MCP browser: connect');
-const client = await connectDocs(true);
+const storeDirectory = process.env.NESSA_DOCS_TEST_STORE;
+const storageLabel = storeDirectory ? 'saved locally' : 'session only';
+const client = await connectDocs(true, undefined, storeDirectory);
 const files = await sampleFiles();
 let shown;
 const calls = [];
@@ -75,7 +77,7 @@ try {
       await frame.getByRole('dialog', {name:'Diagram details'}).waitFor();
       await frame.getByRole('button', {name:'Close details',exact:true}).click();
       await mkdir(new URL('./results/screenshots/',import.meta.url),{recursive:true});
-      await page.screenshot({path:new URL(`./results/screenshots/mcp-demo-${name}.png`,import.meta.url).pathname,fullPage:true});
+      await page.screenshot({path:new URL(`./results/screenshots/mcp-demo-${storeDirectory ? 'durable-' : ''}${name}.png`,import.meta.url).pathname,fullPage:true});
       await frame.getByRole('button',{name:'Example store',exact:true}).click();
       await frame.getByRole('button',{name:'Details',exact:true}).click();
       await frame.getByText('The order code asks a payment provider for a reply.',{exact:false}).waitFor();
@@ -84,7 +86,7 @@ try {
       const changed = await client.callTool({name:'replace_docs',arguments:{expectedRevision:revision,files:malicious}});
       assert(!changed.isError);
       await frame.getByRole('button',{name:'Refresh',exact:true}).click();
-      await frame.getByText(`Revision ${revision+1} · session only`,{exact:true}).waitFor();
+      await frame.getByText(`Revision ${revision+1} · ${storageLabel}`,{exact:true}).waitFor();
       assert.equal(await frame.locator('script').count(), 1, 'Only the bundled script exists');
       await page.frames()[1].waitForFunction(() => [...document.querySelectorAll('figure.diagram')].every(figure => figure.dataset.state !== 'rendering'));
       assert.equal(await frame.locator('.prose > img, img[onerror], img[onload]').count(), 0, 'Markdown cannot create images; Mermaid sanitizer removes executable image handlers');
@@ -94,7 +96,7 @@ try {
       await frame.getByRole('alert').filter({hasText:'host refused'}).waitFor();
       // Old notifications must not undo an accepted refresh.
       await page.evaluate((result) => window.pushResult(result), shown);
-      assert(await frame.getByText(`Revision ${revision+1} · session only`,{exact:true}).isVisible());
+      assert(await frame.getByText(`Revision ${revision+1} · ${storageLabel}`,{exact:true}).isVisible());
       const forged = structuredClone(changed); forged.structuredContent.snapshot.scope = '00000000-0000-4000-8000-000000000000';
       await page.evaluate((result) => window.pushResult(result), forged);
       await frame.getByRole('alert').filter({hasText:'different document session'}).waitFor();
@@ -106,7 +108,7 @@ try {
       const reviewed = await client.callTool({name:'replace_docs',arguments:{expectedRevision:latest,files:inspected}});
       assert(!reviewed.isError, JSON.stringify(reviewed));
       await frame.getByRole('button',{name:'Refresh',exact:true}).click();
-      await frame.getByText(`Revision ${latest+1} · session only`,{exact:true}).waitFor();
+      await frame.getByText(`Revision ${latest+1} · ${storageLabel}`,{exact:true}).waitFor();
       await frame.getByRole('button',{name:'Diagrams',exact:true}).click();
       const payments = frame.getByRole('button',{name:'Details: Payments (also opens Payment provider boundary)',exact:true});
       await payments.click();
@@ -132,17 +134,17 @@ try {
       const restored = await client.callTool({name:'replace_docs',arguments:{expectedRevision:latest+1,files:inspected}});
       assert(!restored.isError);
       await frame.getByRole('button',{name:'Refresh',exact:true}).click();
-      await frame.getByText(`Revision ${latest+2} · session only`,{exact:true}).waitFor();
+      await frame.getByText(`Revision ${latest+2} · ${storageLabel}`,{exact:true}).waitFor();
       assert(await frame.getByRole('heading',{name:'Example store',exact:true}).isVisible(),'Removed selection must not reappear when a later bundle restores that ID');
       await page.setViewportSize({width:390,height:850});
       assert(await page.frames()[1].evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
       await mkdir(new URL('./results/screenshots/',import.meta.url),{recursive:true});
-      await page.screenshot({path:new URL(`./results/screenshots/mcp-${name}.png`,import.meta.url).pathname,fullPage:true});
+      await page.screenshot({path:new URL(`./results/screenshots/mcp-${storeDirectory ? 'durable-' : ''}${name}.png`,import.meta.url).pathname,fullPage:true});
       assert.deepEqual(errors, []);
       outcomes.push({engine:name,ok:true,checks:['opaque sandbox handshake','parent DOM and network denied','model selection context','chart render/zoom/navigation','details','chart explanation','shared explanation selection','explanation navigation','reserved authored keys','detail-only reserved node','refresh selection/context reconciliation','refresh','HTML injection','host refusal','stale result','cross-session refusal','mobile width']});
     } finally { await browser.close(); }
   }
   assert(calls.every((name)=>name==='read_docs'));
-  await writeFile(new URL('./results/mcp-browser.json',import.meta.url), JSON.stringify(outcomes,null,2));
+  await writeFile(new URL(`./results/${storeDirectory ? 'mcp-browser-durable' : 'mcp-browser'}.json`,import.meta.url), JSON.stringify(outcomes,null,2));
   console.log(JSON.stringify(outcomes));
 } finally { server.closeAllConnections(); await new Promise((resolve)=>server.close(resolve)); await client.close(); }

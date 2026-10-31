@@ -1,6 +1,6 @@
 # Nessa Docs in MCP Apps
 
-This adapter adds a transient document explorer to the existing standalone
+This adapter adds a document explorer with memory mode and opt-in local saving to the existing standalone
 browser. Nessa Docs is the agent-authored system map/flow browser; its charts
 are Mermaid diagrams, not a generic analytics or spreadsheet product.
 
@@ -74,6 +74,8 @@ not install that connection or change host configuration.
    `snapshot.files`, then calls `replace_docs` with the current revision and all
    files. Refresh in the explorer reads the latest bundle through the host.
 
+For restart-safe local saving, see [durable bundles](durable-bundles.md).
+
 `replace_docs` is model-visible and mutating/destructive (whole-bundle
 replacement). `read_docs` is read-only, model/app-visible. `show_docs` is
 read-only and model-visible. All tools declare schemas, annotations and text
@@ -95,24 +97,32 @@ starts disabled. The server supports the initialize-based MCP revisions
 | Explorer at N | Result older than N | Ignore | N |
 | Explorer in scope A | Result from scope B | Show refusal, retain accepted content | A |
 | Explorer | Refresh/open-link refused | Show readable error | Accepted content retained |
-| Process exits/restarts | Any | Bundle is lost; recreate from authored files | Empty new scope |
+| Process exits/restarts | Memory mode | Recreate from authored files | Empty new scope |
+| Graceful restart | Durable mode | Restore validated scope/revision and Markdown | Last committed state |
+| Sync unconfirmed after publication | Durable mode | Error; read/reconcile | New visible revision |
 
 Only one replacement is validated at a time; overlapping attempts are refused
-before entering the parser queue. One stdio process owns one bundle, limited to 16 files, 64 Ki characters per
-file and 256 KiB of total UTF-8 Markdown. There is no tenant/account service,
-network listener, durable storage, background synchronization or filesystem
-write. Scope is the MCP process/session, not a chat conversation: a host that
-reuses the process across conversations shares the same bundle. Run separate
-processes for separate document sessions. Cancellation observed before commit
-prevents publication; if a result is lost after commit, read the revision before
-retrying. A session restart loses documents. A UI reload needs the host to replay
-its tool result; Refresh obtains the current accepted revision. When the host advertises text context updates, selecting a page shares only its
-scope/revision/document ID through `ui/update-model-context`, without triggering
-a new model turn. Presentation
-state stays inside each iframe, and Web Storage denial falls back to memory.
+before entering the parser queue. One stdio process owns one bundle, limited to
+16 files, 64 Ki characters per file and 256 KiB of total UTF-8 Markdown. Memory
+mode loses documents on restart. Opt-in durable mode writes only to the private,
+operator-selected store, commits before reporting durable success, and restores
+its scope/revision through validation. A lost/unconfirmed acknowledgement must
+be reconciled with `read_docs` before retry. The store drains admitted disk work
+before releasing its writer lock on graceful shutdown.
 
-The bundle cannot read the laptop. Paths are relative, constrained Markdown
-paths; symlinks and external file lookup do not exist in its virtual repository.
+There is no tenant/account service or network listener. Scope is the MCP
+process/store, not a chat conversation; callers sharing it share its bundle.
+Run separate processes/stores for separate document sessions. A UI reload needs
+the host to replay its tool result; Refresh obtains the accepted revision.
+Selecting a page shares scope/revision/document ID through
+`ui/update-model-context` when supported, without triggering a new model turn.
+Presentation state stays inside each iframe; denied Web Storage falls back to
+memory. Storage status distinguishes session-only, saved locally and
+save-unconfirmed, with the current standalone snapshot path where applicable.
+
+Model tools cannot select laptop paths or read source projects. The catalog sees
+only its closed virtual repository. Durable restore reads only the selected
+owned store through bounded containment/identity/hash checks.
 Cross-page links resolve only inside this bundle. Source references can display
 authored paths but cannot reveal file contents or prove those files exist.
 Model HTML is shown as text; Mermaid uses the existing strict renderer. The
@@ -126,7 +136,7 @@ actual target hosts; local browser success does not establish those limits.
 
 See [host connection and persistence decisions](host-integration.md) for exact
 setup steps, inspected laptop configuration, published capability evidence and
-the minimal durable-storage proposal.
+the implemented durable-storage contract.
 
 ## Verification and remaining host work
 
@@ -135,6 +145,7 @@ npm run typecheck
 npm test
 npm run build
 npm run verify:mcp
+npm run verify:durable
 npm run verify:browser
 ```
 
@@ -147,7 +158,7 @@ independent conformance certification or an actual ChatGPT/Codex session.
 Actual installation is pending: no plugin enrollment, tunnel, public deployment,
 credentials, trust-warning acceptance or persistent host configuration was
 performed. A production remote version needs an authenticated, tenant-scoped
-store/HTTP adapter; do not expose this transient process as a shared service.
+store/HTTP adapter; do not expose this local process/store as a shared service.
 Use synthetic documents when doing the next actual host test. See [the recorded local results](../verification/MCP-RESULTS.md). Record the host
 version, capability advertisement, UI result, permissions/refusals, payload
 limit and reconnect behavior before claiming that host is supported.

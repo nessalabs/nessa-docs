@@ -11,26 +11,25 @@ const outputSchema = portableSchema(z.object({ snapshot: snapshotSchema }));
 const readOnly = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 function result(snapshot: BundleSnapshot) {
   return {
-    content: [{ type: 'text' as const, text: `Nessa Docs revision ${snapshot.revision} (transient session):\n${snapshot.documents.map(({ document, body }) => `${document.title} [${document.id}]\n${body}`).join('\n\n')}` }],
+    content: [{ type: 'text' as const, text: `Nessa Docs revision ${snapshot.revision} (${snapshot.storage.kind === 'memory' ? 'session only' : snapshot.storage.status === 'synced' ? 'saved locally' : 'save unconfirmed'}):\n${snapshot.storage.kind === 'durable' ? `Standalone snapshot: ${snapshot.storage.projectPath}\nRead again for the current path after newer edits.\n` : ''}${snapshot.documents.map(({ document, body }) => `${document.title} [${document.id}]\n${body}`).join('\n\n')}` }],
     structuredContent: { snapshot },
   };
 }
 
-export function createDocsMcpServer(html: string) {
+export function createDocsMcpServer(html: string, bundle = new DocumentBundle()) {
   const server = new McpServer({ name: 'nessa-docs', version: '0.1.0' }, { supportedProtocolVersions: ['2025-11-25', '2025-06-18', '2024-11-05'] });
-  const bundle = new DocumentBundle();
   const safely = async (operation: () => BundleSnapshot | Promise<BundleSnapshot>) => {
     try { return result(await operation()); }
     catch (error) { return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : 'Document operation failed.' }] }; }
   };
   const replace = server.registerTool('replace_docs', {
-    description: 'Create or replace the entire transient Nessa Docs bundle for this MCP session. Validates authored docs/state Markdown and Mermaid bindings; no filesystem reads or writes. Include all pages on each replacement. Use expectedRevision to avoid overwriting newer content. Then call show_docs to display the explorer.',
+    description: 'Create or replace the entire Nessa Docs bundle owned by this MCP process. Validates authored docs/state Markdown and Mermaid bindings; memory-only by default; an operator-selected durable store saves generated Markdown. Tools cannot choose filesystem paths or read source projects. Include all pages on each replacement. Read first after restart; use expectedRevision to avoid overwriting newer content. Then call show_docs to display the explorer.',
     inputSchema: bundleInput,
     outputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
   }, (input, context) => safely(() => bundle.replace(input, context.mcpReq.signal)));
   const read = server.registerTool('read_docs', {
-    description: 'Read the complete current transient document bundle and revision, including validated links. No local files are accessed. Use to refresh the explorer or reconcile a revision conflict.',
+    description: 'Read the complete current document bundle and revision, including validated links. No source-project files are accessed; output states whether the bundle is saved locally. Use to refresh the explorer or reconcile a revision conflict.',
     inputSchema: z.object({}).strict(),
     annotations: readOnly,
     outputSchema,

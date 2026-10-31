@@ -8,10 +8,11 @@ GitHub main because the laptop's extension checkout was behind it.
 | Check | Result |
 | --- | --- |
 | `npm run typecheck` | Pass (client/shared/server) |
-| `npm test` | 188 tests pass across 24 files |
+| `npm test` | 208 tests pass across 25 files |
 | `npm run build` | Pass for standalone client, embedded HTML and server |
 | `node verification/mcp-protocol.mjs` | Pass: real official SDK stdio client; create/read/show, negotiation, errors, conflict, resource/CSP, text fallback |
 | `npm run verify:mcp` | Pass: protocol plus Chromium/WebKit sandboxed UI journeys |
+| `npm run verify:durable` | Pass: process restart, second-process lock exclusion, durable updates, standalone CLI and Chromium/WebKit charts after MCP stops, and durable UI journeys |
 | `npm run verify:browser` | Pass: 1,138/1,138 available fixture checks across 20 engine/script results |
 | Official MCP Inspector CLI `tools/list --strict` | 0 errors, 0 portability warnings; nullable schema types use equivalent anyOf branches |
 | `npm audit` | 0 vulnerabilities after compatible dependency updates |
@@ -34,11 +35,20 @@ no injected script executes and no external responses occur under CSP.
 Unit coverage includes closed bundle paths, invalid catalogs, duplicate paths,
 byte/file limits, isolated instances, invalid cross-document references,
 compare-and-swap races, retained state on failure, cancellation before commit,
-and malformed/unsafe renderer payloads.
+and malformed/unsafe renderer payloads. Durable tests additionally cover private
+owned stores, exact Unicode/UTF-8 round-trip, restored scope/revision, partial
+staging writes, failed rename, rename-after-effect, unconfirmed sync, poisoned
+unknown outcomes, cancellation before/after publication, shutdown/rename drain,
+corrupt/lost manifests, case aliases, symlinked roots/parents/data, foreign scope,
+bounded orphan retention and lock replacement/stale-lock refusal.
 
 Generated evidence (ignored from Git, retained in this task checkout):
 
 - `verification/results/mcp-browser.json`
+- `verification/results/mcp-browser-durable.json`
+- `verification/results/mcp-durable.json`
+- `verification/results/screenshots/mcp-demo-durable-chromium.png`
+- `verification/results/screenshots/mcp-demo-durable-webkit.png`
 - `verification/results/screenshots/mcp-demo-chromium.png`
 - `verification/results/screenshots/mcp-demo-webkit.png`
 - `verification/results/screenshots/mcp-chromium.png`
@@ -54,7 +64,13 @@ plugin, tunnel, public endpoint, credentials or persistent host config was
 created; no trust/security warning was accepted. These actions need a supported,
 authorized host connection. This is pending host verification, not a denied or
 uncertain deployment. Generic MCP/Inspector success is not proof of those UIs.
-The 5.8 MB HTML payload also needs testing against actual host limits.
+The 5.8 MB HTML payload still needs actual-host acceptance testing. The current
+published Secure MCP Tunnel bound is 10 MiB for the complete serialized envelope,
+not a host UI acceptance guarantee. Platform settings could only be reached as a
+sign-in page in the available browser; no organization/workspace tunnel metadata
+was read and no login, key provisioning or grant was attempted. Known local
+profile/state locations were absent. Codex registration remains pending the
+specific user permission asked in the parent thread.
 
 Optional pre-existing atlas and stale-build browser checks were skipped because
 no real atlas URL or older build was supplied. All fixture checks ran.
@@ -68,8 +84,22 @@ special-key lookup in the new dialog action; an own-property guard and a
 `constructor` detail-only regression fix it. Stale link-refusal callbacks are
 guarded as well. The reviewer independently reran the focused schema/payload
 checks (4/4) and reported no remaining blocking findings in the reviewed diff.
-No GitHub issue/PR, push, merge, approval or deployment was performed.
+The durable-storage review also reproduced a shutdown race where releasing the
+lock before a pending rename could let a new writer's cleanup delete the just-
+committed generation. Admitted storage work is now drained through publication
+and outcome classification before lock release; a deterministic regression
+holds rename pending, starts close, verifies a new writer remains excluded, then
+reopens the committed revision. Startup signals and nested cleanup are covered.
+The reviewer independently reran 31 bundle/durable tests after final Unicode and
+partial-write hardening and reported no remaining blocker. No GitHub issue/PR,
+push, merge, approval or deployment was performed.
 
 Exact host transports, read-only configuration findings, pending setup actions,
-payload-bound evidence and a minimal durable-storage design are recorded in
+payload-bound evidence and the opt-in durable-storage contract are recorded in
 [host integration](../docs/host-integration.md).
+
+A synthetic saved demo remains outside the checkout in this task's owned
+`nessa-docs-durable-demo` directory. Its machine-readable location/revision is
+`../nessa-docs-durable-demo.json`. The MCP process is stopped and its lock has
+been released; no host was registered. This generated sample is not a user's
+source project. Its current generation can be opened in the standalone app.

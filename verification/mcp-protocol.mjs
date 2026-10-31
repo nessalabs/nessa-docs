@@ -4,12 +4,12 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 const root = new URL('../', import.meta.url);
-export async function connectDocs(ui = true, supportedProtocolVersions) {
+export async function connectDocs(ui = true, supportedProtocolVersions, storeDirectory) {
   const client = new Client({ name: 'nessa-docs-verifier', version: '1.0.0' }, {
     capabilities: ui ? { extensions: { 'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] } } } : {},
     ...(supportedProtocolVersions ? { supportedProtocolVersions } : {}),
   });
-  await client.connect(new StdioClientTransport({ command: process.execPath, args: ['dist/server/server/mcp/main.js'], cwd: root.pathname, stderr: 'pipe' }));
+  try { await client.connect(new StdioClientTransport({ command: process.execPath, args: ['dist/server/server/mcp/main.js'], cwd: root.pathname, stderr: 'pipe', ...(storeDirectory ? { env: { NESSA_DOCS_STORE: storeDirectory } } : {}) })); } catch (error) { await client.close(); throw error; }
   return client;
 }
 export async function sampleFiles() {
