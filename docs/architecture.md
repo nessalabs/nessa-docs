@@ -55,14 +55,15 @@ Mermaid rendering runs serially because the library keeps global state.
 The canvas handles navigation and presentation after SVG rendering. Markdown
 bindings, rather than inferred labels, decide which element has depth.
 
-## Next adapter: Codex
+## Optional MCP Apps adapter
 
-The current deliverable is a local web app and an installable agent skill.
-A future Codex integration can reuse the document parser, catalog and renderer,
-and supply a project through a host adapter. Filesystem access and project
-selection belong in that adapter, outside the renderer. Browser onboarding must
-not be a dependency of Markdown parsing or diagram rendering.
+`server/mcp` composes the catalog with a closed, in-memory RepositoryFiles
+adapter and a stdio MCP server. Its optional `durable-store.ts` adapter stores
+only generated Markdown in an explicitly selected private directory, with one
+manifest and a drained exclusive writer lock. Memory mode remains the default. `src/mcp` uses the existing Markdown/diagram
+renderer with host-owned navigation and the standard MCP Apps bridge. The
+standalone filesystem/HTTP composition is independent. `shared/mcp-payload.ts`
+validates the structured payload at both sides of the protocol boundary.
 
-No extension manifest, workspace bridge, agent-launch endpoint or generated
-documentation write API is shipped in this pass. Those require an actual host
-contract and their own validation when the integration is built.
+See [MCP Apps](mcp-app.md) for the tools, revision transitions, sandbox contract,
+current host-verification limits and future authenticated remote boundary.

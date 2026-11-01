@@ -1,0 +1,24 @@
+html, body, #root { min-height: 100%; height: auto; overflow: auto; }
+.mcp-explorer { padding: 16px; max-width: 1100px; margin: auto; color: var(--foreground); }
+.mcp-explorer header { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.mcp-explorer header span { flex: 1; color: var(--muted); font-size: 12px; }
+.mcp-explorer button { border: 1px solid var(--rim); border-radius: 8px; padding: 7px 12px; background: var(--pane); color: inherit; cursor: pointer; }
+.mcp-explorer button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.mcp-explorer button[aria-current], .mcp-explorer button[aria-pressed=true] { background: var(--selected); }
+.mcp-explorer nav { display: flex; gap: 6px; flex-wrap: wrap; margin: 16px 0; }
+.mcp-explorer h1 { font-size: 24px; margin-top: 20px; }
+.mcp-explorer [role=group] { display: flex; gap: 6px; margin: 12px 0; }
+.mcp-explorer [role=alert] { color: var(--error); overflow-wrap: anywhere; }
+.mcp-diagrams > :not(figure):not(:has(figure)) { display: none; }
+.mcp-explorer .diagram { margin: 16px 0; }
+.mcp-content { min-width: 0; }
+.mcp-content[data-detail-open] { display: grid; grid-template-columns: minmax(0, 1fr) minmax(270px, 34%); align-items: start; gap: 18px; }
+.mcp-document-view { min-width: 0; }
+
+.mcp-provenance { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.mcp-detail { position: sticky; top: 16px; max-height: calc(100dvh - 32px); overflow-y: auto; border: 1px solid var(--rim); padding: 16px; border-radius: 10px; background: var(--pane); }
+.mcp-detail h2 { margin: 12px 0; font-size: 18px; }
+@media (max-width: 700px) {
+  .mcp-content[data-detail-open] { grid-template-columns: minmax(0, 1fr); }
+  .mcp-detail { grid-row: 1; position: static; max-height: min(55dvh, 480px); }
+}
