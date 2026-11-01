@@ -89,7 +89,18 @@ export class DocumentBundle {
   }
 
   private async build(entries: StoredBundle['files'], revision: number, storage: BundleSnapshot['storage']): Promise<BundleSnapshot> {
-    if (new Set(entries.map((file) => file.path)).size !== entries.length) throw new Error('Duplicate bundle paths are not allowed.');
+    const paths = new Set<string>();
+    const directories = new Map<string, string>();
+    for (const { path } of entries) {
+      const folded = path.toLowerCase();
+      if (paths.has(folded)) throw new Error('Duplicate bundle paths are not allowed, including letter-case variants.');
+      paths.add(folded);
+      for (let parent = posix.dirname(path); parent !== 'docs/state'; parent = posix.dirname(parent)) {
+        const existing = directories.get(parent.toLowerCase());
+        if (existing && existing !== parent) throw new Error('Duplicate bundle paths are not allowed, including letter-case variants.');
+        directories.set(parent.toLowerCase(), parent);
+      }
+    }
     if (entries.reduce((total, file) => total + Buffer.byteLength(file.markdown), 0) > 256 * 1024) throw new Error('Bundle exceeds 256 KiB.');
     const files = bundleFiles(entries);
     const catalog = await loadCatalog(files, '/bundle');

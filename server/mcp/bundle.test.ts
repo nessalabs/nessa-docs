@@ -44,6 +44,14 @@ describe('transient document bundles', () => {
   it('bounds file count, content bytes and duplicate paths', async () => {
     const bundle = new DocumentBundle();
     await expect(bundle.replace({ expectedRevision: 0, files: [file(), file()] })).rejects.toThrow('Duplicate');
+    await expect(bundle.replace({ expectedRevision: 0, files: [file(),
+      { path: 'docs/state/A.md', markdown: doc('upper', 'system') },
+      { path: 'docs/state/a.md', markdown: doc('lower', 'system') },
+    ] })).rejects.toThrow('Duplicate');
+    await expect(bundle.replace({ expectedRevision: 0, files: [file(),
+      { path: 'docs/state/A/one.md', markdown: doc('upper', 'system') },
+      { path: 'docs/state/a/two.md', markdown: doc('lower', 'system') },
+    ] })).rejects.toThrow('Duplicate');
     await expect(bundle.replace({ expectedRevision: 0, files: Array.from({ length: 17 }, (_, i) => ({ path: `docs/state/${i}.md`, markdown: '' })) })).rejects.toThrow();
     await expect(bundle.replace({ expectedRevision: 0, files: Array.from({ length: 5 }, (_, i) => ({ path: `docs/state/${i}.md`, markdown: 'x'.repeat(60000) })) })).rejects.toThrow('256 KiB');
     await expect(bundle.replace({ expectedRevision: 0, files: [file('x'.repeat(65537))] })).rejects.toThrow();

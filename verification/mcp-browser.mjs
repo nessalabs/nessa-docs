@@ -13,6 +13,7 @@ let shown;
 const calls = [];
 const host = `<!doctype html><html><body style="margin:0"><iframe title="Nessa Docs app" sandbox="allow-scripts" src="/app" style="width:100%;height:850px;border:0"></iframe><script>
 window.messages=[];
+window.readDocsFailure=null;
 const frame=document.querySelector('iframe');
 window.pushResult=(result)=>frame.contentWindow.postMessage({jsonrpc:'2.0',method:'ui/notifications/tool-result',params:result},'*');
 window.addEventListener('message',async(event)=>{
@@ -21,7 +22,7 @@ window.addEventListener('message',async(event)=>{
  const reply=(result)=>frame.contentWindow.postMessage({jsonrpc:'2.0',id:m.id,result},'*');
  if(m.method==='ui/initialize')reply({protocolVersion:'2026-01-26',hostInfo:{name:'local-test-host',version:'1'},hostCapabilities:{serverTools:{},openLinks:{},updateModelContext:{text:{}}},hostContext:{theme:'light',displayMode:'inline',availableDisplayModes:['inline']}});
  else if(m.method==='ui/notifications/initialized')window.pushResult(await(await fetch('/shown')).json());
- else if(m.method==='tools/call')reply(await(await fetch('/call',{method:'POST',body:JSON.stringify(m.params)})).json());
+ else if(m.method==='tools/call')reply(m.params.name==='read_docs' && window.readDocsFailure!==null ? {isError:true,content:[{type:'text',text:window.readDocsFailure}]} : await(await fetch('/call',{method:'POST',body:JSON.stringify(m.params)})).json());
  else if(m.method==='ui/open-link')reply({isError:true});
  else if(m.id!==undefined)reply({});
 });</script></body></html>`;
@@ -85,6 +86,13 @@ try {
       await frame.getByRole('button', {name:'Close details',exact:true}).click();
       await mkdir(new URL('./results/screenshots/',import.meta.url),{recursive:true});
       await page.screenshot({path:new URL(`./results/screenshots/mcp-demo-${storeDirectory ? 'durable-' : ''}${name}.png`,import.meta.url).pathname,fullPage:true});
+      await page.evaluate(() => { window.readDocsFailure = 'Durable sync was not confirmed. Read and reconcile before retrying.'; });
+      await frame.getByRole('button',{name:'Refresh',exact:true}).click();
+      await frame.getByRole('alert').filter({hasText:'Durable sync was not confirmed.'}).waitFor();
+      await page.evaluate(() => { window.readDocsFailure = ''; });
+      await frame.getByRole('button',{name:'Refresh',exact:true}).click();
+      await frame.getByRole('alert').filter({hasText:'Refresh was refused by the document server.'}).waitFor();
+      await page.evaluate(() => { window.readDocsFailure = null; });
       await frame.getByRole('button',{name:'Example store',exact:true}).click();
       await frame.getByRole('button',{name:'Details',exact:true}).click();
       await frame.getByText('The order code asks a payment provider for a reply.',{exact:false}).waitFor();

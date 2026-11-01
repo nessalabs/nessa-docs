@@ -90,7 +90,10 @@ function Explorer() {
     setBusy(true); setError('');
     try {
       const result = await app.callServerTool({ name: 'read_docs', arguments: {} });
-      if (result.isError) throw new Error('Refresh was refused by the document server.');
+      if (result.isError) {
+        const message = result.content.find((item) => item.type === 'text')?.text;
+        throw new Error(message || 'Refresh was refused by the document server.');
+      }
       accept(result.structuredContent);
     } catch (error) { if (current === requested) setError(error instanceof Error ? error.message : 'Refresh failed.'); }
     finally { setBusy(false); }
