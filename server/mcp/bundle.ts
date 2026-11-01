@@ -78,8 +78,13 @@ export class DocumentBundle {
   }
 
   read(): BundleSnapshot {
+    const snapshot = this.readOptional();
+    if (!snapshot) throw new Error('No documents yet. Call replace_docs with expectedRevision 0 first.');
+    return snapshot;
+  }
+
+  readOptional(): BundleSnapshot | null {
     if (this.unavailable) throw new Error(this.unavailable);
-    if (!this.snapshot) throw new Error('No documents yet. Call replace_docs with expectedRevision 0 first.');
     return this.snapshot;
   }
 

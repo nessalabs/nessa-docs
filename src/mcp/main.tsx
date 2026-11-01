@@ -24,6 +24,7 @@ function accept(value: unknown) {
 app.ontoolresult = (result) => {
   try {
     if (result.isError) throw new Error('The document tool failed. Ask the model to retry.');
+    if ((result.structuredContent as { snapshot?: unknown } | undefined)?.snapshot === null) return;
     accept(result.structuredContent);
   } catch (error) { report(error instanceof Error ? error.message : 'Invalid document result.'); }
 };
@@ -62,11 +63,17 @@ function Explorer() {
   useEffect(() => {
     const generation = ++contextGeneration.current;
     if (!snapshot || !doc || !app.getHostCapabilities()?.updateModelContext?.text) return;
-    app.updateModelContext({ content: [{ type: 'text', text: JSON.stringify({ scope: snapshot.scope, revision: snapshot.revision, documentId: doc.document.id }) }] }).catch(() => {
+    app.updateModelContext({ content: [{ type: 'text', text: JSON.stringify({
+      scope: snapshot.scope,
+      revision: snapshot.revision,
+      documentId: doc.document.id,
+      view,
+      selectedDetail: detailEntry?.detail ?? null,
+    }) }] }).catch(() => {
       if (contextGeneration.current === generation && current?.revision === snapshot.revision) setError('The host could not share this selection with the model.');
     });
     return () => { contextGeneration.current++; };
-  }, [snapshot?.scope, snapshot?.revision, doc?.document.id]);
+  }, [snapshot?.scope, snapshot?.revision, doc?.document.id, view, detailKey]);
   useEffect(() => {
     if (fragment !== null) document.getElementById(fragment)?.scrollIntoView();
   }, [doc?.document.id, fragment, view]);
@@ -105,7 +112,7 @@ function Explorer() {
     }
   }
   return <main className="mcp-explorer" onClickCapture={link}>
-    <header><strong>Nessa Docs</strong><span>{snapshot ? `Revision ${snapshot.revision} · ${snapshot.storage.kind === 'memory' ? 'session only' : snapshot.storage.status === 'synced' ? 'saved locally' : 'save unconfirmed'}` : 'Connecting to documents…'}</span><button disabled={busy || !snapshot} onClick={refresh}>{busy ? 'Refreshing…' : 'Refresh'}</button></header>
+    <header><strong>Nessa Docs</strong><span>{snapshot ? `Revision ${snapshot.revision} · ${snapshot.storage.kind === 'memory' ? 'session only' : snapshot.storage.status === 'synced' ? 'saved locally' : 'save unconfirmed'}` : 'No documents yet'}</span><button disabled={busy} onClick={refresh}>{busy ? 'Refreshing…' : 'Refresh'}</button></header>
     {snapshot?.storage.kind === 'durable' && <p className="mcp-provenance">Standalone snapshot (refresh for current path): <code>{snapshot.storage.projectPath}</code></p>}
     {error && <p role="alert">{error}</p>}
     {!doc ? <p role="status">Ask the model to create a document bundle, then show it here.</p> : <>
@@ -113,13 +120,17 @@ function Explorer() {
       <article key={`${doc.document.id}:${snapshot?.revision}`}>
         <h1>{doc.document.title}</h1><p>{doc.document.summary}</p><p className="mcp-provenance">{doc.document.status}{doc.document.sourceRevision ? ` · Reviewed at ${doc.document.sourceRevision}` : ' · Source revision not recorded'}</p>
         <div role="group" aria-label="Document view"><button aria-pressed={view === 'diagrams'} onClick={() => setView('diagrams')}>Diagrams</button><button aria-pressed={view === 'details'} onClick={() => setView('details')}>Details</button></div>
-        <MarkdownBody tokens={tokens} slugs={slugs} links={doc.links} className={view === 'diagrams' && diagrams.length > 0 ? 'prose mcp-diagrams' : 'prose'} diagram={(index, source) => <Diagram key={`${index}:${source}`} index={index} source={source} links={doc.diagramLinks} onNavigateDocument={choose} details={detailsByDiagram[index]} selectedDetail={detailKey} onSelectDetail={(key, element) => { detailTrigger.current = element; setDetailKey(key); }} />} />
-        {detailSection !== null && sections[detailSection] && <section ref={dialog} tabIndex={-1} role="dialog" aria-label="Diagram details" className="mcp-detail" onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); closeDetail(); } }}>
-          <button onClick={closeDetail}>Close details</button>
-          <h2>{sections[detailSection].title}</h2>
-          {deeperPage && <button onClick={() => choose(deeperPage.id)}>Open {deeperPage.title}</button>}
-          <MarkdownBody tokens={tokens.slice(sections[detailSection].start + 1, sections[detailSection].end)} slugs={slugs} links={doc.links} diagram={(_, source) => <pre>{source}</pre>} />
-        </section>}
+        <div className="mcp-content" data-detail-open={detailSection !== null && sections[detailSection] ? '' : undefined}>
+          <div className="mcp-document-view">
+            <MarkdownBody tokens={tokens} slugs={slugs} links={doc.links} className={view === 'diagrams' && diagrams.length > 0 ? 'prose mcp-diagrams' : 'prose'} diagram={(index, source) => <Diagram key={`${index}:${source}`} index={index} source={source} links={doc.diagramLinks} onNavigateDocument={choose} details={detailsByDiagram[index]} selectedDetail={detailKey} onSelectDetail={(key, element) => { detailTrigger.current = element; setDetailKey(key); }} />} />
+          </div>
+          {detailSection !== null && sections[detailSection] && <section ref={dialog} tabIndex={-1} role="dialog" aria-label="Diagram details" className="mcp-detail" onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); closeDetail(); } }}>
+            <button onClick={closeDetail}>Close details</button>
+            <h2>{sections[detailSection].title}</h2>
+            {deeperPage && <button onClick={() => choose(deeperPage.id)}>Open {deeperPage.title}</button>}
+            <MarkdownBody tokens={tokens.slice(sections[detailSection].start + 1, sections[detailSection].end)} slugs={slugs} links={doc.links} diagram={(_, source) => <pre>{source}</pre>} />
+          </section>}
+        </div>
         {doc.issues.length > 0 && <details><summary>Document warnings ({doc.issues.length})</summary>{doc.issues.map((issue, i) => <p key={i}>{issue.message}</p>)}</details>}
       </article>
     </>}

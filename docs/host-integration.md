@@ -60,8 +60,10 @@ Actual `codex-cli 0.155.1 app-server` discovery connected and exposed all three
 tools. Its `mcpServer/tool/call` RPC created synthetic revision 1, showed the
 same scope, updated to revision 2, rejected a stale revision-1 write, and read
 the updated text. This is actual Codex runtime routing, without model selection.
-The test client advertised no Apps capability: no UI metadata/resources were
-returned. This verifies the text/structured fallback only.
+The test client advertised no Apps capability. Before the descriptor fix, it
+received no UI metadata/resources. After the fix, a fresh host connection lists
+the `show_docs` thread entrypoint and the HTML resource. Embedded rendering
+is still unverified; see the [right-panel plan](mcp-right-panel-plan.md).
 
 A separate ephemeral `codex exec` model turn selected `read_docs`,
 `replace_docs`, and `show_docs` in the requested order. Both writes failed with
@@ -72,9 +74,11 @@ This host error is an approval-policy refusal, not proof that an automatic
 reviewer evaluated or rejected the document content.
 
 The desktop automation inventory exposes a Codex MCP Apps surface, but it had
-no app tabs. This does not establish whether that desktop version supports this
-registered server's iframe UI. Desktop rendering, chart interaction and reload
-remain unverified. A successful CLI call is not embedded-chart verification.
+no app tabs before the rebuilt server was reconnected. This does not establish
+whether that desktop version supports this registered server's iframe UI.
+Model context from the MCP app reached the conversation for a synthetic page,
+but the location of its rendered UI, chart interaction and reload remain
+unverified. A successful CLI call is not embedded-chart verification.
 
 `verification/codex-host.mjs` is an explicit opt-in runtime harness for an
 already registered memory-mode server in this checkout. Set

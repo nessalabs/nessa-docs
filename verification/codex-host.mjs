@@ -58,6 +58,9 @@ try{
   }
   assert(status,'Registered server not found');
   assert.deepEqual(Object.values(status.tools).map(tool=>tool.name).sort(),['read_docs','replace_docs','show_docs']);
+  const showTool = Object.values(status.tools).find(tool=>tool.name==='show_docs');
+  assert.equal(showTool._meta?.ui?.resourceUri,'ui://nessa-docs/explorer-v1.html');
+  assert.deepEqual(showTool._meta?.['openai/ui']?.entrypoints,[{type:'thread'}]);
   async function call(tool,args={}){const result=await rpc('mcpServer/tool/call',{threadId,server:'nessa-docs',tool,arguments:args});calls.push({tool,arguments:args,result});return result;}
   assert.equal((await call('read_docs')).isError,true);
   const first=await call('replace_docs',{expectedRevision:0,files:[{path:'docs/state/README.md',markdown:sample('Initial synthetic content.')}]});assert(!first.isError,JSON.stringify(first));
@@ -66,7 +69,7 @@ try{
   const second=await call('replace_docs',{expectedRevision:1,files:[{path:'docs/state/README.md',markdown:sample('Updated synthetic content.')}]});assert(!second.isError);assert.equal(second.structuredContent.snapshot.revision,2);
   assert.equal((await call('replace_docs',{expectedRevision:1,files:[{path:'docs/state/README.md',markdown:sample('Stale synthetic update.')}]})).isError,true);
   const read=await call('read_docs');assert.equal(read.structuredContent.snapshot.revision,2);assert(read.structuredContent.snapshot.files[0].markdown.includes('Updated synthetic content.'));
-  const report={ok:true,host:version+' app-server',initialized,threadId,runtimeStatus:status.runtimeStatus??null,serverInfo:status.serverInfo??null,tools:Object.values(status.tools).map(tool=>({name:tool.name,ui:tool._meta?.ui??null})),resources:status.resources.map(({uri,mimeType})=>({uri,mimeType})),calls,uiRenderingVerified:false,modelToolSelectionVerified:false};
+  const report={ok:true,host:version+' app-server',initialized,threadId,runtimeStatus:status.runtimeStatus??null,serverInfo:status.serverInfo??null,tools:Object.values(status.tools).map(tool=>({name:tool.name,ui:tool._meta?.ui??null,entrypoints:tool._meta?.['openai/ui']?.entrypoints??null})),resources:status.resources.map(({uri,mimeType})=>({uri,mimeType})),calls,uiRenderingVerified:false,modelToolSelectionVerified:false};
   await mkdir(new URL('./results/',import.meta.url),{recursive:true});await writeFile(new URL('./results/codex-host.json',import.meta.url),JSON.stringify(report,null,2));
   console.log(JSON.stringify({ok:true,host:report.host,runtimeStatus:report.runtimeStatus,tools:report.tools,resources:report.resources,revisions:[1,2],staleWriteRejected:true,uiRenderingVerified:false}));
 }finally{lines.close();child.stdin.end();if(!stopped)child.kill('SIGTERM');}

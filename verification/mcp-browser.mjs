@@ -75,6 +75,13 @@ try {
       await frame.getByRole('button', {name:'Details: Draft',exact:true}).waitFor();
       await frame.getByRole('button', {name:'Details: Draft',exact:true}).click();
       await frame.getByRole('dialog', {name:'Diagram details'}).waitFor();
+      await page.waitForFunction(() => window.messages.some(message => message.method === 'ui/update-model-context' && JSON.parse(message.params.content[0].text).selectedDetail?.target?.node === 'Draft'));
+      const sideBySide = await page.frames()[1].evaluate(() => {
+        const chart = document.querySelector('.mcp-document-view figure.diagram')?.getBoundingClientRect();
+        const detail = document.querySelector('.mcp-detail')?.getBoundingClientRect();
+        return chart && detail ? { chartRight: chart.right, detailLeft: detail.left, detailTop: detail.top } : null;
+      });
+      assert(sideBySide && sideBySide.detailLeft >= sideBySide.chartRight - 1, `Explanation should open beside the chart: ${JSON.stringify(sideBySide)}`);
       await frame.getByRole('button', {name:'Close details',exact:true}).click();
       await mkdir(new URL('./results/screenshots/',import.meta.url),{recursive:true});
       await page.screenshot({path:new URL(`./results/screenshots/mcp-demo-${storeDirectory ? 'durable-' : ''}${name}.png`,import.meta.url).pathname,fullPage:true});
@@ -141,7 +148,7 @@ try {
       await mkdir(new URL('./results/screenshots/',import.meta.url),{recursive:true});
       await page.screenshot({path:new URL(`./results/screenshots/mcp-${storeDirectory ? 'durable-' : ''}${name}.png`,import.meta.url).pathname,fullPage:true});
       assert.deepEqual(errors, []);
-      outcomes.push({engine:name,ok:true,checks:['opaque sandbox handshake','parent DOM and network denied','model selection context','chart render/zoom/navigation','details','chart explanation','shared explanation selection','explanation navigation','reserved authored keys','detail-only reserved node','refresh selection/context reconciliation','refresh','HTML injection','host refusal','stale result','cross-session refusal','mobile width']});
+      outcomes.push({engine:name,ok:true,checks:['opaque sandbox handshake','parent DOM and network denied','model selection context','chart render/zoom/navigation','details beside chart','chart explanation','shared explanation selection','explanation navigation','reserved authored keys','detail-only reserved node','refresh selection/context reconciliation','refresh','HTML injection','host refusal','stale result','cross-session refusal','mobile width']});
     } finally { await browser.close(); }
   }
   assert(calls.every((name)=>name==='read_docs'));

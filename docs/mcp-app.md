@@ -68,8 +68,13 @@ not install that connection or change host configuration.
    not replace an accepted version.
 3. The model calls `show_docs`. A capable host reads
    `ui://nessa-docs/explorer-v1.html` and supplies the tool result to that iframe.
+   In ChatGPT, `show_docs` also advertises a thread entrypoint so the user can
+   open the same MCP explorer as a content tab beside the conversation. An empty
+   bundle opens with a prompt to create one; Refresh reads it after creation.
 4. The user follows diagram nodes or document buttons, switches between
-   diagrams and details, pans/zooms charts, and opens chart explanations.
+   diagrams and details, pans/zooms charts, and opens chart explanations beside
+   the chart on wide panels. Document, view, and selected chart detail are sent
+   to the model through `ui/update-model-context` when the host supports it.
 5. For an edit, the model calls `read_docs`, reconciles the complete returned
    `snapshot.files`, then calls `replace_docs` with the current revision and all
    files. Refresh in the explorer reads the latest bundle through the host.
@@ -79,16 +84,18 @@ For restart-safe local saving, see [durable bundles](durable-bundles.md).
 `replace_docs` is model-visible and mutating/destructive (whole-bundle
 replacement). `read_docs` is read-only, model/app-visible. `show_docs` is
 read-only and model-visible. All tools declare schemas, annotations and text
-fallback; only `show_docs` advertises the UI resource after capability
-negotiation. Handlers are registered before SDK connection; the HTML resource
-starts disabled. The server supports the initialize-based MCP revisions
-2025-11-25, 2025-06-18 and 2024-11-05. The Apps bridge negotiates independently.
+fallback. The HTML resource and `show_docs` thread entrypoint are advertised
+at registration time, including to clients that do not advertise an Apps
+capability; those clients continue using the text fallback. The server supports
+the initialize-based MCP revisions 2025-11-25, 2025-06-18 and 2024-11-05.
+The Apps bridge negotiates independently when a host opens the resource.
 
 ## State and refusal contract
 
 | Current state | Input | Guard/result | Next state |
 | --- | --- | --- | --- |
-| Empty | Read/show | Tool error, no content | Empty |
+| Empty | Read | Tool error, no content | Empty |
+| Empty | Show | Open the explorer with an empty state | Empty |
 | Empty or revision N | Replace | Schema, size, catalog and expected revision pass | Publish revision N+1 atomically |
 | Any | Cancellation observed before commit | Refuse publication; release validation admission | Unchanged |
 | Any | Invalid bundle | Error, no mutation | Unchanged |
@@ -155,9 +162,13 @@ CSP. It tests the protocol, rendering/navigation, refresh, stale/cross-session
 results, HTML injection, host refusal and responsive layout. This is not an
 independent conformance certification or an actual ChatGPT/Codex session.
 
-Actual installation is pending: no plugin enrollment, tunnel, public deployment,
-credentials, trust-warning acceptance or persistent host configuration was
-performed. A production remote version needs an authenticated, tenant-scoped
+The local stdio connection has been tested in ChatGPT desktop with synthetic
+documents. The thread entrypoint metadata and side detail layout pass local
+protocol and browser tests. A fresh Codex `app-server` connection now lists
+the resource and entrypoint; the revised descriptor still needs a desktop host
+reconnection and visible panel check. See the [right-panel plan](mcp-right-panel-plan.md).
+No tunnel, public deployment, or remote
+storage was added. A production remote version needs an authenticated, tenant-scoped
 store/HTTP adapter; do not expose this local process/store as a shared service.
 Use synthetic documents when doing the next actual host test. See [the recorded local results](../verification/MCP-RESULTS.md). Record the host
 version, capability advertisement, UI result, permissions/refusals, payload

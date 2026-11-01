@@ -121,3 +121,23 @@ write retried. `results/codex-model-host.jsonl` retains the actual tool events.
 Desktop MCP Apps inventory had no tabs; actual embedded rendering remains
 unverified. See [host integration](../docs/host-integration.md) for the exact
 installed command, reproducible runtime harness and remaining host requirements.
+
+## Right-panel descriptor follow-up
+
+The desktop conversation could create and update a synthetic bundle, and
+`show_docs` returned revision 2, but the right-side browser tab was the separate
+localhost website. MCP Apps inventory had no tabs. The server was then found to
+hide its HTML resource and thread entrypoint when a client omitted the Apps
+capability during initialization. The earlier Codex `app-server` status showed
+`ui: null` and no resources for that path.
+
+The server now advertises the resource and entrypoint unconditionally. The real
+SDK stdio protocol check passes with and without the capability, and a fresh
+Codex CLI 0.155.1 `app-server` status lists the `show_docs` thread entrypoint
+and the `text/html;profile=mcp-app` resource. Synthetic host calls still pass.
+The running desktop MCP session has not been reconnected to the rebuilt server.
+A repeat `show_docs` returned the existing revision 2 and the MCP Apps tab
+inventory remained empty. Separately, MCP app model context arrived with
+revision 2, document ID `payment-contract` and view `diagrams`; that confirms
+bridge activity but not right-panel placement. The next checks are in
+the [right-panel plan](../docs/mcp-right-panel-plan.md).
