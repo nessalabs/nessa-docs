@@ -1,3 +1,4 @@
+import { ProjectBrand } from './project-brand';
 // The window's top-left corner (the sidebar toggle and the nessaDocs name),
 // and the titlebar every page draws at the top of the reading pane: Back and
 // Forward, where you are, and the page's own actions.
@@ -29,10 +30,7 @@ export const AppBar = forwardRef<
       >
         <PanelLeft />
       </IconButton>
-      <AppLink to="/" className="brand" aria-label="Nessa Docs" title="System overview" onClick={onHome}>
-        <span className="brand-name">nessa</span>
-        <span className="brand-product">Docs</span>
-      </AppLink>
+      <ProjectBrand title="System overview" onHome={onHome} />
     </div>
   );
 });

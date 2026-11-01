@@ -105,7 +105,7 @@ export async function runSettings(engine, scope = 'fixture') {
       await page.locator(S.settingsPage).waitFor();
       const general = await tabFacts(page);
       c.check('Settings link opens /settings on General', general.path === '/settings' && general.selected === 'general' && general.panelHas.theme && general.panelLabelledBy === general.selectedId, general);
-      c.check('Settings: link marked current, document title, focus on the heading', (await footerFacts(page)).current === 'page' && (await page.title()) === 'Settings · Nessa Docs' && (await activeElement(page))?.tag === 'h1');
+      c.check('Settings: link marked current, document title, focus on the heading', (await footerFacts(page)).current === 'page' && (await page.title()) === `Settings · ${await page.locator('.brand').getAttribute('aria-label')}` && (await activeElement(page))?.tag === 'h1');
       await page.locator(S.settingsTab('health')).click();
       await page.locator(S.health).waitFor();
       const health = await tabFacts(page);

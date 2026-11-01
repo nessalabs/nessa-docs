@@ -1,0 +1,6 @@
+/* A project title uses the existing app bar without covering history controls. */
+.app-bar .project-brand { min-width: 0; max-width: calc(var(--sidebar-w) - 64px); flex-direction: column; align-items: flex-start; gap: 2px; font-size: 13px; line-height: 1.2; letter-spacing: 0; }
+.app-bar .project-brand .brand-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-bar .project-brand .brand-product { font-size: 11px; }
+.shell[data-sidebar='closed']:not([data-narrow]) .app-bar .project-brand,
+.shell[data-narrow] .app-bar .project-brand { max-width: max(0px, calc(var(--app-bar-w) - 52px)); }

@@ -1,3 +1,4 @@
+import { useDocsName } from './project-brand';
 // One document. The reading pane gives its width to the prose and diagrams;
 // provenance (file, sources, warnings) is a closed footer and the outline is
 // one click away in the titlebar rather than a permanent column. A chart
@@ -124,6 +125,7 @@ export function chooseView(search: string, hash: string, hasDiagrams: boolean): 
 const NO_DETAILS: readonly DiagramDetailEntry[] = [];
 
 function DocumentView({ response, focusOnLoad }: { response: DocumentResponse; focusOnLoad: boolean }) {
+  const docsName = useDocsName();
   const { document, breadcrumbs, children, sources, issues } = response;
   // Closed on every document: DocumentView is keyed by document, so this starts false each time.
   const [provenanceOpen, setProvenanceOpen] = useState(false);
@@ -257,9 +259,9 @@ function DocumentView({ response, focusOnLoad }: { response: DocumentResponse; f
   }, []);
 
   useEffect(() => {
-    window.document.title = `${document.title} · Nessa Docs`;
+    window.document.title = `${document.title} · ${docsName}`;
     if (focusOnLoad) title.current?.focus({ preventScroll: true });
-  }, [document.title, focusOnLoad]);
+  }, [document.title, focusOnLoad, docsName]);
 
   // On arrival and on every view change: the named section, or the top.
   const hash = window.location.hash;
@@ -516,6 +518,7 @@ function OutlineMenu({ headings, hrefFor }: { headings: readonly Heading[]; href
   );
 }
 
+
 function ChildList({ items }: { items: readonly DocumentSummary[] }) {
   return (
     <section className="child-section" aria-label="Contents">
@@ -566,8 +569,9 @@ export function IssueList({ title, issues }: { title: string; issues: readonly C
 }
 
 function UnknownDocument({ response }: { response: UnknownDocumentResponse }) {
+  const docsName = useDocsName();
   useEffect(() => {
-    window.document.title = 'Document not found · Nessa Docs';
+    window.document.title = `Document not found · ${docsName}`;
   }, []);
   return (
     <>
