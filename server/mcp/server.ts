@@ -5,7 +5,7 @@ import { snapshotSchema } from '../../shared/mcp-payload.js';
 import { portableSchema } from './schema.js';
 import { DocumentBundle, bundleFileText, bundleInput, type BundleFile } from './bundle.js';
 import type { BundleSnapshot } from '../../shared/mcp.js';
-import { CHECKER_STATES, CHECK_RUN_STATES } from '../../shared/model-check.js';
+import { BROKEN_RULE_LIMITS, CHECKER_STATES, CHECK_RUN_STATES } from '../../shared/model-check.js';
 import { createCheckerCache } from '../model-check/cache.js';
 import { diagramNodeIds } from '../model-check/nodes.js';
 import { withModelCheck } from '../model-check/record.js';
@@ -38,7 +38,7 @@ const checkInput = z.object({
   page: z.string().max(200).optional().describe('Document id or docs/state page path in the current bundle.'),
   spec: z.string().max(65536).optional().describe('TLA+ spec text. Use this or page, not both.'),
   config: z.string().max(65536).optional().describe('TLC config text. Required with spec.'),
-  steps: z.record(z.string().max(80), z.string().max(200)).optional().describe('TLC action name to one plain sentence, used when spec and config are passed directly.'),
+  steps: z.record(z.string().max(80), z.string().max(BROKEN_RULE_LIMITS.sentence)).optional().describe('TLC action name to one plain sentence, used when spec and config are passed directly.'),
 }).strict();
 
 const checkOutputSchema = portableSchema(z.object({
@@ -47,7 +47,7 @@ const checkOutputSchema = portableSchema(z.object({
   checker: z.object({ state: z.enum(CHECKER_STATES), version: z.string(), cachePath: z.string(), message: z.string().optional() }),
   result: z.object({
     sourceRevision: z.string().optional(), checker: z.string(), date: z.string(), config: z.string(), modelDigest: z.string(),
-    states: z.number(), held: z.array(z.string()), broke: z.array(z.object({ rule: z.string(), path: z.array(z.string()), states: z.array(z.string()) })), unchecked: z.array(z.string()),
+    states: z.number(), held: z.array(z.string()), broke: z.array(z.object({ rule: z.string(), path: z.array(z.string().min(1).max(BROKEN_RULE_LIMITS.sentence)).min(1).max(BROKEN_RULE_LIMITS.path), states: z.array(z.string()) })), unchecked: z.array(z.string()),
   }).optional(),
   snapshot: snapshotSchema.nullable(),
 }));

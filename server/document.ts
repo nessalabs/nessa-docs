@@ -9,7 +9,7 @@ import {
   type DocumentStatus,
   type IssueCode,
 } from '../shared/api.js';
-import type { BrokenRule, ModelCheckRecord, ModelLink } from '../shared/model-check.js';
+import { BROKEN_RULE_LIMITS, type BrokenRule, type ModelCheckRecord, type ModelLink } from '../shared/model-check.js';
 
 export const DOCUMENT_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_ID_LENGTH = 120;
@@ -292,8 +292,8 @@ function readModel(
       }
       for (const [key, sentence] of entries) {
         if (!RULE_NAME.test(key) || key.length > 80) invalid(`model.steps.${key}`, 'a TLC action name', key);
-        else if (typeof sentence !== 'string' || sentence.trim() === '' || sentence.length > 200 || /[\r\n]/.test(sentence)) {
-          invalid(`model.steps.${key}`, 'one plain sentence (1–200 characters, one line)', sentence);
+        else if (typeof sentence !== 'string' || sentence.trim() === '' || sentence.length > BROKEN_RULE_LIMITS.sentence || /[\r\n]/.test(sentence)) {
+          invalid(`model.steps.${key}`, `one plain sentence (1–${BROKEN_RULE_LIMITS.sentence} characters, one line)`, sentence);
         } else steps[key] = sentence;
       }
     }
@@ -391,10 +391,10 @@ function brokenRules(
     const path = entry.path;
     const states = entry.states;
     const ruleOk = typeof entry.rule === 'string' && RULE_NAME.test(entry.rule);
-    const pathOk = Array.isArray(path) && path.length > 0 && path.length <= 30 && path.every((step) => typeof step === 'string' && step.trim() !== '' && step.length <= 200 && !/[\r\n]/.test(step));
+    const pathOk = Array.isArray(path) && path.length > 0 && path.length <= BROKEN_RULE_LIMITS.path && path.every((step) => typeof step === 'string' && step.trim() !== '' && step.length <= BROKEN_RULE_LIMITS.sentence && !/[\r\n]/.test(step));
     const statesOk = Array.isArray(states) && states.length <= 20 && states.every((state) => typeof state === 'string' && DIAGRAM_NODE_ID.test(state));
     if (!ruleOk) invalid(`${field}.rule`, 'a TLC rule name', entry.rule);
-    if (!pathOk) invalid(`${field}.path`, 'one or more plain sentences', path);
+    if (!pathOk) invalid(`${field}.path`, `1 to ${BROKEN_RULE_LIMITS.path} plain sentences of at most ${BROKEN_RULE_LIMITS.sentence} characters each`, path);
     if (!statesOk) invalid(`${field}.states`, 'a list of diagram state ids', states);
     if (ruleOk && pathOk && statesOk) rules.push({ rule: entry.rule as string, path: path as string[], states: states as string[] });
   }

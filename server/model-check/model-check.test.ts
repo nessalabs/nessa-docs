@@ -5,7 +5,9 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { BROKEN_RULE_LIMITS, type BrokenRule, type ModelCheckRecord } from '../../shared/model-check.js';
 import { loadCatalog } from '../catalog.js';
+import { parseDocumentFile } from '../document.js';
 import { doc, REPO, STATE } from '../testing/documents.js';
 import { memoryFiles } from '../testing/memory-files.js';
 import { createCheckerCache, tlcCacheDirectory, type Downloader } from './cache.js';
@@ -15,6 +17,7 @@ import type { DownloadPin } from './pins.js';
 import { withModelCheck } from './record.js';
 import { checkSpec, type CommandResult, type CommandRunner } from './run.js';
 import { createModelCheckService } from './service.js';
+import { PATH_OMITTED, plainPath, SHORTENED_MARK, type TraceStep } from './trace.js';
 import { nodeRepositoryFiles } from '../files.js';
 
 const SPEC = `---- MODULE Attachment ----
@@ -75,6 +78,24 @@ describe('TLC config rules', () => {
     expect(ruleNames(withoutRule(config, 'Alpha'))).toEqual(['Beta', 'Eventually']);
     expect(withoutRule(config, 'Alpha')).toContain('CONSTANTS N = 1');
   });
+
+  it.each(['INVARIANTS', 'PROPERTIES'])('keeps the %s header when a later line still names a rule', (keyword) => {
+    const config = `${keyword} Alpha\n  Beta\n`;
+    expect(withoutRule(config, 'Alpha')).toBe(`${keyword}\n  Beta\n`);
+    expect(ruleNames(withoutRule(config, 'Alpha'))).toEqual(['Beta']);
+    expect(withoutRule(`${keyword} Alpha \\* keep\n  Beta\n`, 'Alpha')).toBe(`${keyword} \\* keep\n  Beta\n`);
+    expect(withoutRule(`${keyword} Alpha\n  Beta\n`, 'Beta')).toBe(`${keyword} Alpha\n`);
+  });
+
+  it.each(['INVARIANTS', 'PROPERTIES'])('drops the %s header only when its list is empty', (keyword) => {
+    expect(withoutRule(`${keyword} Alpha\n`, 'Alpha')).toBe('');
+    expect(ruleNames(withoutRule(`${keyword}\n  Alpha\n`, 'Alpha'))).toEqual([]);
+    expect(withoutRule(`${keyword}\n  Alpha\n`, 'Alpha')).not.toContain(keyword);
+    expect(withoutRule(`${keyword} Alpha \\* keep\n`, 'Alpha')).toBe('\\* keep\n');
+    const nextSection = keyword.startsWith('INVARIANT') ? 'PROPERTY' : 'INVARIANT';
+    expect(withoutRule(`${keyword} Alpha\n${nextSection} Gamma\n`, 'Alpha')).toBe(`${nextSection} Gamma\n`);
+    expect(ruleNames(withoutRule(`${keyword} Alpha\n${nextSection} Gamma\nCONSTANTS N = 1\n`, 'Alpha'))).toEqual(['Gamma']);
+  });
 });
 
 describe('checkSpec', () => {
@@ -128,6 +149,35 @@ describe('checkSpec', () => {
     expect(result).toMatchObject({ state: 'not-checked', findings: { held: [], broke: [], unchecked: ['NoWriteAfterClose', 'OnlyOpenOrClosed'] } });
   });
 
+  it.each(['INVARIANTS', 'PROPERTIES'])('checks the rule on the next line after a broken %s name', async (keyword) => {
+    const seen: string[] = [];
+    const result = await checkSpec({
+      ...base,
+      config: `SPECIFICATION Spec\n${keyword} NoWriteAfterClose\n  OnlyOpenOrClosed\n`,
+      signal: new AbortController().signal,
+      run: runner(async (config, _signal, onOutput) => {
+        seen.push(config);
+        const listed = ruleNames(config);
+        if (listed.length === 0 || !/^(?:INVARIANT|INVARIANTS|PROPERTY|PROPERTIES)\b/m.test(config)) {
+          const report = 'Error: The configuration file is not correct.';
+          onOutput(report);
+          return { code: 1, signal: null, stdout: report, stderr: '' };
+        }
+        const report = config.includes('NoWriteAfterClose') ? brokenReport() : passedReport();
+        onOutput(report);
+        return { code: config.includes('NoWriteAfterClose') ? 1 : 0, signal: null, stdout: report, stderr: '' };
+      }),
+    });
+    expect(result.state).toBe('broke');
+    if (result.state !== 'broke') return;
+    expect(result.findings.broke.map((item) => item.rule)).toEqual(['NoWriteAfterClose']);
+    expect(result.findings.held).toEqual(['OnlyOpenOrClosed']);
+    expect(result.findings.unchecked).toEqual([]);
+    expect(seen[1]).toMatch(new RegExp(`^${keyword}\\b`, 'm'));
+    expect(seen[1]).toContain('OnlyOpenOrClosed');
+    expect(seen[1]).not.toContain('NoWriteAfterClose');
+  });
+
   it('cancels without a result', async () => {
     const signal = new AbortController();
     const pending = checkSpec({
@@ -141,6 +191,148 @@ describe('checkSpec', () => {
     await expect(pending).resolves.toMatchObject({ state: 'cancelled' });
   });
 });
+
+describe('saved traces stay inside the page limits', () => {
+  const record = (broke: BrokenRule): ModelCheckRecord => ({
+    checker: 'tlc-1.7.4',
+    date: '2026-11-02T08:12:00.000Z',
+    config: 'tla/attachment.cfg',
+    modelDigest: 'b'.repeat(64),
+    states: 31,
+    held: ['OnlyOpenOrClosed'],
+    broke: [broke],
+    unchecked: [],
+  });
+
+  it('saves a trace longer than the path limit and the page stays in the catalog', async () => {
+    const steps: TraceStep[] = Array.from({ length: BROKEN_RULE_LIMITS.path + 1 }, (_, index) => ({
+      action: `Step${index}`,
+      assignments: [`phase = "${index === BROKEN_RULE_LIMITS.path ? 'Closed' : 'Open'}"`],
+    }));
+    const fitting = plainPath(steps.slice(0, BROKEN_RULE_LIMITS.path), {});
+    expect(fitting).toHaveLength(BROKEN_RULE_LIMITS.path);
+    expect(fitting.at(-1)).not.toBe(PATH_OMITTED);
+
+    const result = await checkSpec({
+      spec: SPEC,
+      config: CONFIG,
+      steps: {},
+      nodeIds: ['Open', 'Closed'],
+      java: 'java',
+      jar: 'tla2tools.jar',
+      signal: new AbortController().signal,
+      run: runner(async (config, _signal, onOutput) => {
+        const report = config.includes('NoWriteAfterClose') ? violationReport(steps) : passedReport();
+        onOutput(report);
+        return { code: config.includes('NoWriteAfterClose') ? 1 : 0, signal: null, stdout: report, stderr: '' };
+      }),
+    });
+    expect(result.state).toBe('broke');
+    if (result.state !== 'broke') return;
+    const broken = result.findings.broke[0];
+    expect(broken?.path).toHaveLength(BROKEN_RULE_LIMITS.path);
+    expect(broken?.path.at(-1)).toBe(PATH_OMITTED);
+    expect(broken?.path[0]).toContain('Step0');
+    expect(broken?.path[BROKEN_RULE_LIMITS.path - 2]).toContain(`Step${BROKEN_RULE_LIMITS.path - 2}`);
+    expect(broken?.path.some((step) => step.includes(`Step${BROKEN_RULE_LIMITS.path - 1}`) || step.includes(`Step${BROKEN_RULE_LIMITS.path}`))).toBe(false);
+    expect(broken?.states).toEqual(['Closed']);
+    expect(broken?.path.every((step) => step.length <= BROKEN_RULE_LIMITS.sentence && !/[\r\n]/.test(step))).toBe(true);
+    if (!broken) return;
+    await expectSavedPage(record(broken));
+  });
+
+  it('saves an assignment longer than the sentence limit and the page stays in the catalog', async () => {
+    const value = 'x'.repeat(BROKEN_RULE_LIMITS.sentence + 1);
+    const exact = 'A'.repeat(BROKEN_RULE_LIMITS.sentence);
+    expect(plainPath([{ action: 'Close', assignments: [] }], { Close: exact })).toEqual([exact]);
+
+    const result = await checkSpec({
+      spec: SPEC,
+      config: CONFIG,
+      steps: {},
+      nodeIds: ['Open', 'Closed'],
+      java: 'java',
+      jar: 'tla2tools.jar',
+      signal: new AbortController().signal,
+      run: runner(async (config, _signal, onOutput) => {
+        const report = config.includes('NoWriteAfterClose')
+          ? violationReport([{ action: 'Next', assignments: [`phase = "${value}"`] }])
+          : passedReport();
+        onOutput(report);
+        return { code: config.includes('NoWriteAfterClose') ? 1 : 0, signal: null, stdout: report, stderr: '' };
+      }),
+    });
+    expect(result.state).toBe('broke');
+    if (result.state !== 'broke') return;
+    const broken = result.findings.broke[0];
+    expect(broken?.path).toHaveLength(1);
+    expect(broken?.path[0]).toMatch(/^Next: phase is x/);
+    expect(broken?.path[0]?.endsWith(SHORTENED_MARK)).toBe(true);
+    expect(broken?.path[0]?.length).toBe(BROKEN_RULE_LIMITS.sentence);
+    if (!broken) return;
+    await expectSavedPage(record(broken));
+  });
+
+  it('rejects a path the shared limits do not allow', () => {
+    const page = doc('attachment', 'nessa', { model: { spec: 'tla/attachment.tla', config: 'tla/attachment.cfg', steps: {} } }, '# Attachment\n');
+    const over = withModelCheck(page, record({
+      rule: 'NoWriteAfterClose',
+      path: Array.from({ length: BROKEN_RULE_LIMITS.path + 1 }, () => 'Step.'),
+      states: [],
+    }));
+    expect(parseDocumentFile(over).kind).toBe('rejected');
+    const longSentence = withModelCheck(page, record({
+      rule: 'NoWriteAfterClose',
+      path: ['x'.repeat(BROKEN_RULE_LIMITS.sentence + 1)],
+      states: [],
+    }));
+    expect(parseDocumentFile(longSentence).kind).toBe('rejected');
+    const atLimit = withModelCheck(page, record({
+      rule: 'NoWriteAfterClose',
+      path: Array.from({ length: BROKEN_RULE_LIMITS.path }, () => 'x'.repeat(BROKEN_RULE_LIMITS.sentence)),
+      states: [],
+    }));
+    expect(parseDocumentFile(atLimit).kind).toBe('parsed');
+  });
+});
+
+async function expectSavedPage(saved: ModelCheckRecord) {
+  const page = doc('attachment', 'nessa', {
+    kind: 'statechart',
+    model: { spec: 'tla/attachment.tla', config: 'tla/attachment.cfg', steps: {} },
+  }, '# Attachment\n\n```mermaid\nstateDiagram-v2\n  [*] --> Open\n```\n');
+  const markdown = withModelCheck(page, saved);
+  const parsed = parseDocumentFile(markdown);
+  expect(parsed.kind).toBe('parsed');
+  if (parsed.kind !== 'parsed') return;
+  expect(parsed.document.modelCheck?.broke[0]?.path).toEqual([...saved.broke[0]?.path ?? []]);
+  const catalog = await loadCatalog(memoryFiles({
+    [`${STATE}/README.md`]: doc('nessa', null),
+    [`${STATE}/attachment.md`]: markdown,
+    [`${STATE}/tla/attachment.tla`]: SPEC,
+    [`${STATE}/tla/attachment.cfg`]: CONFIG,
+  }), REPO);
+  expect(catalog.issues.filter((issue) => issue.severity === 'error')).toEqual([]);
+  expect(catalog.documents.has('attachment')).toBe(true);
+  expect(catalog.documents.get('attachment')?.summary.modelCheck?.broke[0]?.path).toEqual([...saved.broke[0]?.path ?? []]);
+}
+
+function violationReport(states: readonly TraceStep[]): string {
+  const chunks = [
+    '@!@!@STARTMSG 2110:1 @!@!@',
+    'Invariant NoWriteAfterClose is violated.',
+    '@!@!@ENDMSG 2110 @!@!@',
+  ];
+  states.forEach((state, index) => {
+    chunks.push(
+      '@!@!@STARTMSG 2217:4 @!@!@',
+      `${index + 1}: <${state.action} line 1, col 1 to line 1, col 2 of module Attachment>`,
+      ...state.assignments,
+      '@!@!@ENDMSG 2217 @!@!@',
+    );
+  });
+  return chunks.join('\n');
+}
 
 describe('modelCheck frontmatter', () => {
   it('adds the result and leaves the other fields', () => {
