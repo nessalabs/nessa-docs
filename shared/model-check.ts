@@ -7,6 +7,14 @@ export const CHECKER_ID = `tlc-${TLC_VERSION}`;
 /** Distinct-state cap and wall-clock cap for one TLC invocation. */
 export const MODEL_CHECK_LIMITS = { maxDistinctStates: 2_000, timeoutMs: 20_000 } as const;
 
+/**
+ * Bounds for a plain sentence stored on a page. `path` is the most steps on a
+ * broken rule. `sentence` is the most characters in one of those steps, and
+ * in one `model.steps` sentence. The checker writes inside these bounds, and
+ * the page parser rejects a record outside them.
+ */
+export const BROKEN_RULE_LIMITS = { path: 30, sentence: 200 } as const;
+
 export const CHECK_RUN_STATES = [
   'not-installed',
   'downloading',
@@ -38,6 +46,10 @@ export interface BrokenRule {
   readonly states: readonly string[];
 }
 
+/** Why a run left rules in `unchecked`. */
+export const CHECK_STOPS = ['states', 'time'] as const;
+export type CheckStop = (typeof CHECK_STOPS)[number];
+
 /** Frontmatter `modelCheck`, also the tool and HTTP result body. */
 export interface ModelCheckRecord {
   readonly sourceRevision?: string;
@@ -49,6 +61,8 @@ export interface ModelCheckRecord {
   readonly held: readonly string[];
   readonly broke: readonly BrokenRule[];
   readonly unchecked: readonly string[];
+  /** Set when the state limit or the time limit stopped the run. */
+  readonly stop?: CheckStop;
 }
 
 export interface CheckerStatus {
@@ -71,4 +85,5 @@ export interface RuleFindings {
   readonly held: readonly string[];
   readonly broke: readonly BrokenRule[];
   readonly unchecked: readonly string[];
+  readonly stop?: CheckStop;
 }

@@ -57,6 +57,7 @@ export async function checkSpec(request: CheckRequest): Promise<CheckRunResult> 
     let remaining = [...rules];
     let states = 0;
     let unfinished: 'not-checked' | null = null;
+    let stop: 'states' | 'time' | undefined;
     for (let round = 0; round < rules.length && remaining.length > 0; round += 1) {
       if (request.signal.aborted) return { state: 'cancelled' };
       await writeFile(join(directory, `${moduleName}.tla`), request.spec);
@@ -68,6 +69,7 @@ export async function checkSpec(request: CheckRequest): Promise<CheckRunResult> 
       states = Math.max(states, outcome.states);
       if (outcome.kind === 'bound') {
         unfinished = 'not-checked';
+        stop = outcome.reason;
         break;
       }
       if (outcome.kind === 'violation') {
@@ -84,7 +86,7 @@ export async function checkSpec(request: CheckRequest): Promise<CheckRunResult> 
       break;
     }
     const unchecked = unfinished ? remaining : [];
-    const findings = { states, held, broke, unchecked };
+    const findings = { states, held, broke, unchecked, ...(stop ? { stop } : {}) };
     if (broke.length > 0) return { state: 'broke', findings };
     if (unchecked.length > 0) return { state: 'not-checked', findings };
     return { state: 'passed', findings };
@@ -96,7 +98,7 @@ export async function checkSpec(request: CheckRequest): Promise<CheckRunResult> 
 type TlcOutcome =
   | { readonly kind: 'passed'; readonly states: number }
   | { readonly kind: 'violation'; readonly states: number; readonly broken: RuleFindings['broke'][number] }
-  | { readonly kind: 'bound'; readonly states: number }
+  | { readonly kind: 'bound'; readonly states: number; readonly reason: 'states' | 'time' }
   | { readonly kind: 'cancelled' }
   | { readonly kind: 'failed'; readonly message: string };
 
@@ -140,7 +142,7 @@ async function runTlc(
     const states = distinctStates(output);
     const report = `${output}\n${result.stderr}`;
     if (reason === 'cancel') return { kind: 'cancelled' };
-    if (reason === 'cap' || reason === 'timeout') return { kind: 'bound', states };
+    if (reason === 'cap' || reason === 'timeout') return { kind: 'bound', states, reason: reason === 'cap' ? 'states' : 'time' };
     if (tlcSucceeded(report)) return { kind: 'passed', states };
     const broken = brokenRule(report, request.steps, request.nodeIds);
     if (broken) return { kind: 'violation', states, broken };

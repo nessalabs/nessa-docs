@@ -21,7 +21,7 @@ import { AppLink, documentPath, navigate, scrollToHash, useSearchAndHash } from 
 import { Titlebar } from './shell';
 import { plainText } from '../shared/markdown';
 import { DocumentStatusLabel, IconButton, QuietButton, SegmentedControl, SegmentedControlOption } from './ui';
-import { RuleBadge, RuleCheckControls, RulePath } from './rule-check';
+import { RuleBadge, RuleCheckControls, RulePath, ruleVerification, useRuleDisclosure } from './rule-check';
 import type { ProjectReads } from './project-opening/read-port';
 import { useEscapeLayer } from './layers';
 import { useNarrow } from './viewport';
@@ -181,6 +181,14 @@ function DocumentView({ response, focusOnLoad, onChecked }: { response: Document
     }
     return marks;
   }, [response.document.modelCheck]);
+  const ruleMark = document.model
+    ? ruleVerification({ model: true, modelCheck: document.modelCheck, stale: document.modelCheckStale })
+    : null;
+  const rules = useRuleDisclosure(
+    ruleMark,
+    document.model ? <DocumentRuleCheck id={document.id} onDone={onChecked} /> : null,
+    document.id,
+  );
   const [expandedCharts, setExpandedCharts] = useState(0);
   const invoker = useRef<Element | null>(null);
   // Where focus goes once the inspector has closed: the element it came from, or the link's destination.
@@ -368,6 +376,7 @@ function DocumentView({ response, focusOnLoad, onChecked }: { response: Document
                 {document.sourceRevision ? `Reviewed at ${document.sourceRevision.slice(0, 12)}` : 'Source revision not recorded'}
               </button>
               <RuleBadge revision={document.modelCheck?.sourceRevision} stale={document.modelCheckStale} />
+              {rules.toggle}
               {issues.length > 0 ? (
                 <button type="button" className="meta-warning" onClick={openProvenance} aria-controls={provenanceId}>
                   {issues.length} warning{issues.length === 1 ? '' : 's'}
@@ -383,7 +392,7 @@ function DocumentView({ response, focusOnLoad, onChecked }: { response: Document
               <p className="document-summary">{document.summary}</p>
             ) : null}
             {viewSwitch ? <div className="narrow-only view-switch-slot">{viewSwitch}</div> : null}
-            {document.model ? <DocumentRuleCheck id={document.id} onDone={onChecked} /> : null}
+            {rules.panel}
             <RulePath rules={ruleMarks.get(ruleNode ?? '') ?? []} />
           </header>
 

@@ -158,7 +158,7 @@ config bytes. `states` is how many distinct states the last finished TLC run
 reported. `held`, `broke`, and `unchecked` name TLC invariants and properties.
 A broken rule has a plain-language path and the chart states where it failed.
 A rule that the bound or the timeout did not finish is `unchecked`, never
-`held`.
+`held`. `stop` is `states` or `time` when that limit is what stopped the run.
 
 The chart badge "Rules checked at <short id>" is stale when the page checkpoint
 and `modelCheck.sourceRevision` differ, or when the linked files no longer match

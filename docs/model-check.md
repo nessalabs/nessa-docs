@@ -16,7 +16,8 @@ mirroring the page path. The page links them in frontmatter (`model.spec`,
 finished check is `modelCheck` in the same frontmatter: the page's source
 checkpoint, the checker version, the date, the config path, a digest of the
 spec and config bytes, the state count, rules held, rules broken with a
-plain-language path, and rules not checked.
+plain-language path, rules not checked, and whether the state limit or the
+time limit stopped the run.
 
 Those files and the result are committed with the page. TLC and Java are not.
 They download into a per-user cache and are reused when the pinned checksums
@@ -134,3 +135,89 @@ checker version, cache path, and an install button when the cache is absent.
 
 Out of scope: Apalache, Quint, Spectacle, checking the code itself, and the
 agent skill that writes models. That skill change belongs in `nessalabs/skills`.
+
+## Saved traces and multi-line rule lists
+
+A finished check has to leave a page the catalog still accepts, and it has to
+be able to check the rules that were not the one that broke. The checker and
+the page parser share `BROKEN_RULE_LIMITS`: 30 steps, and 200 characters in
+one sentence. The writer and the reader both use that constant.
+
+### A counterexample longer than the page allows
+
+TLC can print more than 30 states, and a fallback assignment such as
+`phase is <value>` can be longer than 200 characters. The saved path is the
+prefix that fits.
+A sentence that does not fit is cut and ends with ` (shortened)`. A path that
+does not fit keeps the leading steps and ends with `Later steps were shortened.`
+The chart's broken states still come from the last TLC state.
+
+| State | What is true | What happens next |
+| --- | --- | --- |
+| Fits | Every sentence is within 200 characters and the path has at most 30 steps | Save the sentences as rendered |
+| Long sentence | One sentence is over 200 characters | Cut it to 200 and end with ` (shortened)` |
+| Long path | The trace has more than 30 steps | Keep the leading steps that fit, then `Later steps were shortened.` |
+| Stored | The saved path is inside the shared limits | The page stays in the catalog and a bundle can publish it |
+
+Invariants:
+
+1. The checker and the page parser use the same step count and the same sentence length.
+2. A finished break writes a path the parser accepts. Reload keeps the page, and bundle publication is not failed by that record.
+3. A sentence is marked ` (shortened)` only when it was cut, and the stored sentence stays on one line.
+4. The path gains `Later steps were shortened.` only when steps were left out, and the stored path is never longer than 30.
+5. Broken chart states still come from the last TLC state when the printed path omits later steps.
+
+### A rule list that continues on the next line
+
+`INVARIANT`, `INVARIANTS`, `PROPERTY`, and `PROPERTIES` are one list that may
+span lines. Removing a broken name deletes that name. The header stays while
+any name of that list remains, including a name on a following line. The
+header is dropped only when the list has no names left. A comment on the
+dropped line stays. Constants, the specification, and other rules stay.
+
+| State | What is true | What happens next |
+| --- | --- | --- |
+| Names remain | Other names of that list remain, on this line or a later one | Keep the header and remove only the broken name |
+| List empty | No name remains before the next keyword | Drop the header. Keep a comment that was on that line |
+| Other lines | The line is a constant, the specification, or another rule | Leave it unchanged |
+
+Invariants:
+
+1. Removing a rule deletes the first occurrence of that name and no other name.
+2. Invariant headers and property headers follow the same rule.
+3. The header stays while any name of its list remains, including a name on a following line.
+4. The header is dropped only when that list has no names left.
+5. The next TLC run still names every other rule, so the violation already found is saved and the remaining rules can still be checked.
+
+### Alternatives
+
+Rejecting a trace that does not fit, or failing the check when the next config
+would be invalid, loses because the run did finish. The violation is discarded
+and the page keeps a stale result, or none.
+
+Raising the parser limits to whatever TLC printed loses because a
+counterexample has no natural size, and the bound is what keeps a page and a
+bundle small. The writer fits the record the reader already accepts.
+
+Deleting a header whenever its own line no longer contains a name loses
+because a name on the next line is left with no keyword. TLC rejects that
+config, the check returns failed, and the violation is discarded.
+
+Joining every remaining name onto the header line also checks. It loses
+because it rewrites comments, indentation, and grouping the author wrote.
+Keeping the header and the following lines is the smaller edit.
+
+### Review brief
+
+Confirm a trace of more than 30 states and an assignment of more than 200
+characters are saved, round-trip through the page parser, and leave the page
+in the catalog. Confirm both limits are the one shared constant. Confirm a
+path of 30 steps is stored unchanged, and a longer path ends with `Later steps
+were shortened.`
+
+Confirm `INVARIANTS Alpha` followed by an indented `Beta` still has its header
+after Alpha is removed, and the same for `PROPERTIES`. Confirm the header is
+gone when the list is empty, including when the only name was on the next
+line. Confirm the next run holds the remaining rule.
+
+Out of scope: changing TLC's state or time bound, and checking the code itself.

@@ -6,6 +6,17 @@ html, body, #root { min-height: 100%; height: auto; overflow: auto; }
 .mcp-explorer button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .mcp-explorer button[aria-current], .mcp-explorer button[aria-pressed=true] { background: var(--selected); }
 .mcp-explorer nav { display: flex; gap: 6px; flex-wrap: wrap; margin: 16px 0; }
+.mcp-explorer nav button { display: inline-flex; align-items: center; gap: 6px; }
+.mcp-explorer button.rule-status-toggle {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.mcp-explorer button.rule-status-verified { color: var(--nessa-notification-success); }
+.mcp-explorer button.rule-status-broke { color: var(--error); }
+.mcp-explorer button.rule-status-open { color: var(--warn); }
 .mcp-explorer h1 { font-size: 24px; margin-top: 20px; }
 .mcp-explorer [role=group] { display: flex; gap: 6px; margin: 12px 0; }
 .mcp-explorer [role=alert] { color: var(--error); overflow-wrap: anywhere; }

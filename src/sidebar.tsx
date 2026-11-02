@@ -8,6 +8,7 @@ import type { CatalogResponse, DocumentSummary, SearchResult } from '../shared/a
 import { useProjectReads } from './project-opening/project-context';
 import { byKind, KIND_NAME } from './kinds';
 import { AppLink, documentPath, settingsPath } from './router';
+import { RuleStatusIcon } from './rule-check';
 import { Input } from './ui';
 
 interface SidebarProps {
@@ -123,6 +124,7 @@ function Row(props: {
           </span>
         ) : null}
         <span className="row-label">{document.title}</span>
+        <RuleStatusIcon model={document.model !== undefined} modelCheck={document.modelCheck} stale={document.modelCheckStale} />
       </AppLink>
     </div>
   );

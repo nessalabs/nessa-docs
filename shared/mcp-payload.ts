@@ -1,14 +1,16 @@
 // Validate the bridge payload before allowing it into the shared renderer.
 import { z } from 'zod';
 import { DOCUMENT_KINDS, DOCUMENT_STATUSES } from './api.js';
+import { BROKEN_RULE_LIMITS } from './model-check.js';
 import type { BundleSnapshot } from './mcp.js';
 const id = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
-const sentence = z.string().min(1).max(200);
+const sentence = z.string().min(1).max(BROKEN_RULE_LIMITS.sentence);
 const modelLink = z.object({ spec: z.string(), config: z.string(), steps: z.record(z.string(), sentence) }).strict();
-const brokenRule = z.object({ rule: z.string(), path: z.array(sentence).min(1), states: z.array(z.string()) }).strict();
+const brokenRule = z.object({ rule: z.string(), path: z.array(sentence).min(1).max(BROKEN_RULE_LIMITS.path), states: z.array(z.string()) }).strict();
 const modelCheck = z.object({
   sourceRevision: z.string().optional(), checker: z.string(), date: z.string(), config: z.string(), modelDigest: z.string(),
   states: z.number().int().nonnegative(), held: z.array(z.string()), broke: z.array(brokenRule), unchecked: z.array(z.string()),
+  stop: z.enum(['states', 'time']).optional(),
 }).strict();
 const summary = z.object({
   id, title: z.string(), kind: z.enum(DOCUMENT_KINDS), status: z.enum(DOCUMENT_STATUSES), summary: z.string(), parent: id.nullable(), children: z.array(id), file: z.string(), sourceRevision: z.string().optional(),

@@ -1,9 +1,103 @@
 // Check rules: progress, cancel, and a visible install offer when TLC is missing.
 // The wording stays the same in the app and the MCP explorer.
 
-import { useState } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
+import { CircleAlert, CircleCheck, CircleDashed, type LucideIcon } from 'lucide-react';
 import type { ModelCheckRecord, ModelCheckRunView } from '../shared/model-check';
 import { QuietButton } from './ui';
+
+export interface RuleMark {
+  readonly status: 'verified' | 'broke' | 'open';
+  readonly label: string;
+  readonly rules: readonly { readonly rule: string; readonly path: readonly string[] }[];
+  readonly reasons: readonly string[];
+}
+
+const STATUS_ICON: Record<RuleMark['status'], LucideIcon> = {
+  verified: CircleCheck,
+  broke: CircleAlert,
+  open: CircleDashed,
+};
+
+/** Icon state for a page. No model means no indicator. */
+export function ruleVerification(input: {
+  readonly model: boolean;
+  readonly modelCheck?: ModelCheckRecord;
+  readonly stale?: boolean;
+}): RuleMark | null {
+  if (!input.model) return null;
+  const check = input.modelCheck;
+  const rules = check?.broke.map((item) => ({ rule: item.rule, path: item.path })) ?? [];
+  if (!check) return { status: 'open', label: 'Not checked', rules, reasons: ['This model has not been checked.'] };
+  const reasons = openReasons(check, input.stale === true);
+  if (input.stale) return { status: 'open', label: 'Out of date', rules, reasons };
+  if (rules.length > 0) return { status: 'broke', label: 'Not verified', rules, reasons };
+  if (check.unchecked.length > 0) return { status: 'open', label: 'Not checked', rules, reasons };
+  return { status: 'verified', label: 'Verified', rules, reasons: [] };
+}
+
+function openReasons(check: ModelCheckRecord, stale: boolean): string[] {
+  const reasons: string[] = [];
+  if (stale) reasons.push('The model changed since this check.');
+  if (check.unchecked.length > 0) {
+    const names = check.unchecked.join(', ');
+    if (check.stop === 'states') reasons.push(`The state limit stopped the check before ${names}.`);
+    else if (check.stop === 'time') reasons.push(`The check timed out before ${names}.`);
+    else reasons.push(`Not finished: ${names}.`);
+  }
+  return reasons;
+}
+
+/** Icon only, for a catalog row. The words are the hover label and the accessible name. */
+export function RuleStatusIcon({ model, modelCheck, stale }: { model?: boolean; modelCheck?: ModelCheckRecord; stale?: boolean }) {
+  const mark = ruleVerification({ model: model === true, modelCheck, stale });
+  if (!mark) return null;
+  const Icon = STATUS_ICON[mark.status];
+  return (
+    <span className={`rule-status-icon rule-status-${mark.status}`} title={mark.label} data-rule-status={mark.status}>
+      <Icon aria-hidden="true" />
+      <span className="visually-hidden">{mark.label}</span>
+    </span>
+  );
+}
+
+/** Compact status button, with the detail and the check action behind it. */
+export function useRuleDisclosure(mark: RuleMark | null, controls: ReactNode, resetKey?: string) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+  useEffect(() => { setOpen(false); }, [resetKey]);
+  if (!mark) return { toggle: null, panel: null };
+  const Icon = STATUS_ICON[mark.status];
+  const toggle = (
+    <button
+      type="button"
+      className={`rule-status-toggle rule-status-${mark.status}`}
+      aria-expanded={open}
+      aria-controls={panelId}
+      aria-label={mark.label}
+      title={mark.label}
+      data-testid="rule-status"
+      data-rule-status={mark.status}
+      onClick={() => setOpen((value) => !value)}
+    >
+      <Icon aria-hidden="true" />
+    </button>
+  );
+  const panel = (
+    <div id={panelId} className="rule-status-panel" hidden={!open} data-testid="rule-status-panel">
+      {mark.status === 'verified' ? <p>Every rule held on this model.</p> : null}
+      {mark.rules.map((item) => (
+        <div key={item.rule}>
+          <p><strong>{item.rule}</strong> does not hold.</p>
+          <ol>{item.path.map((step, index) => <li key={`${item.rule}-${index}`}>{step}</li>)}</ol>
+        </div>
+      ))}
+      {mark.reasons.map((reason) => <p key={reason}>{reason}</p>)}
+      {controls}
+    </div>
+  );
+  return { toggle, panel };
+}
 
 export function RuleBadge({ revision, stale }: { revision?: string; stale?: boolean }) {
   if (!revision) return null;
