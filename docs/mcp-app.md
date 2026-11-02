@@ -81,9 +81,19 @@ not install that connection or change host configuration.
 
 For restart-safe local saving, see [durable bundles](durable-bundles.md).
 
+`check_model` runs TLC on a page in the bundle, or on spec and config text
+passed in the call. It is the same checker as the app button. A finished check
+of a bundle page writes `modelCheck` into that page and publishes a new
+revision. A missing checker is reported, with an install action, and is not a
+pass. Rules that hit the state cap or timeout are not checked, and not checked
+is not a pass. The model checks the design, not the code. Include linked
+`.tla` and `.cfg` files in the bundle when checking by page path. See
+[rule checking](model-check.md).
+
 `replace_docs` is model-visible and mutating/destructive (whole-bundle
 replacement). `read_docs` is read-only, model/app-visible. `show_docs` is
-read-only and model-visible. All tools declare schemas, annotations and text
+read-only and model-visible. `check_model` is model- and app-visible. It can
+install TLC (a network download) and it rewrites one page's `modelCheck`. All tools declare schemas, annotations and text
 fallback. The HTML resource and `show_docs` thread entrypoint are advertised
 at registration time, including to clients that do not advertise an Apps
 capability; those clients continue using the text fallback. The server supports

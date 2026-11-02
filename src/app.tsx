@@ -171,8 +171,8 @@ function ProjectApp({ source, unselected, projectTitle = null }: { source: Proje
         hidden={!(narrow && drawerOpen)}
       />
       <main id="main" className="main" inert={narrow && drawerOpen ? true : undefined}>
-        {route.kind === 'settings' && api === null ? (<SettingsPage projectTitle={projectTitle} catalogState={unselected === null ? { kind: 'loading' } : { kind: 'failed', message: 'Open a project to read its documentation.', reloading: false }} onReload={reload} focusOnLoad={pathname !== firstPath.current} />) : api === null && unselected === null ? (<><Titlebar current="Loading" /><div className="page-status" aria-busy="true">Loading…</div></>) : route.kind === 'open-project' || api === null ? (<OpenProject source={source} initial={unselected ?? undefined} />) : route.kind === 'settings' ? (
-          <SettingsPage projectTitle={catalog?.documents.find((doc) => doc.id === catalog.rootId)?.title ?? projectTitle} catalogState={catalogState} onReload={reload} focusOnLoad={pathname !== firstPath.current} />
+        {route.kind === 'settings' && api === null ? (<SettingsPage source={source} projectTitle={projectTitle} catalogState={unselected === null ? { kind: 'loading' } : { kind: 'failed', message: 'Open a project to read its documentation.', reloading: false }} onReload={reload} focusOnLoad={pathname !== firstPath.current} />) : api === null && unselected === null ? (<><Titlebar current="Loading" /><div className="page-status" aria-busy="true">Loading…</div></>) : route.kind === 'open-project' || api === null ? (<OpenProject source={source} initial={unselected ?? undefined} />) : route.kind === 'settings' ? (
+          <SettingsPage source={source} projectTitle={catalog?.documents.find((doc) => doc.id === catalog.rootId)?.title ?? projectTitle} catalogState={catalogState} onReload={reload} focusOnLoad={pathname !== firstPath.current} />
         ) : catalogState.kind === 'failed' ? (
           <>
             <Titlebar current="Unavailable" />

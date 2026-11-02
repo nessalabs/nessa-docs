@@ -3,7 +3,17 @@ import { z } from 'zod';
 import { DOCUMENT_KINDS, DOCUMENT_STATUSES } from './api.js';
 import type { BundleSnapshot } from './mcp.js';
 const id = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
-const summary = z.object({ id, title: z.string(), kind: z.enum(DOCUMENT_KINDS), status: z.enum(DOCUMENT_STATUSES), summary: z.string(), parent: id.nullable(), children: z.array(id), file: z.string(), sourceRevision: z.string().optional() });
+const sentence = z.string().min(1).max(200);
+const modelLink = z.object({ spec: z.string(), config: z.string(), steps: z.record(z.string(), sentence) }).strict();
+const brokenRule = z.object({ rule: z.string(), path: z.array(sentence).min(1), states: z.array(z.string()) }).strict();
+const modelCheck = z.object({
+  sourceRevision: z.string().optional(), checker: z.string(), date: z.string(), config: z.string(), modelDigest: z.string(),
+  states: z.number().int().nonnegative(), held: z.array(z.string()), broke: z.array(brokenRule), unchecked: z.array(z.string()),
+}).strict();
+const summary = z.object({
+  id, title: z.string(), kind: z.enum(DOCUMENT_KINDS), status: z.enum(DOCUMENT_STATUSES), summary: z.string(), parent: id.nullable(), children: z.array(id), file: z.string(), sourceRevision: z.string().optional(),
+  model: modelLink.optional(), modelCheck: modelCheck.optional(), modelCheckStale: z.boolean().optional(),
+}).strict();
 const crumb = z.object({ id, title: z.string() });
 const fragment = z.string().nullable();
 const target = z.discriminatedUnion('kind', [
@@ -20,7 +30,8 @@ const detail = z.object({ diagram: z.number().int().nonnegative(), family: z.enu
   z.object({ kind: z.literal('edge'), from: z.string(), to: z.string(), label: z.string(), element: z.string() }),
 ]) });
 const response = z.object({ version: z.string(), document: summary, body: z.string().max(65536), links: z.record(z.string(), target), sources: z.array(z.object({ raw: z.string(), target })), diagramLinks: z.record(z.string(), crumb), diagramDetails: z.array(detail), breadcrumbs: z.array(crumb), children: z.array(summary), issues: z.array(issue) });
-export const snapshotSchema = z.object({ storage: z.discriminatedUnion('kind', [z.object({kind:z.literal('memory')}), z.object({kind:z.literal('durable'),status:z.enum(['synced','unconfirmed']),projectPath:z.string()})]), files: z.array(z.object({ path: z.string(), markdown: z.string().max(65536) })).min(1).max(16), scope: z.uuid(), revision: z.number().int().positive(), catalog: z.object({ version: z.string(), rootId: id, documents: z.array(summary).min(1).max(16), issues: z.array(issue) }), documents: z.array(response).min(1).max(16) });
+const bundleFile = z.union([z.object({ path: z.string(), markdown: z.string().max(65536) }).strict(), z.object({ path: z.string(), text: z.string().max(65536) }).strict()]);
+export const snapshotSchema = z.object({ storage: z.discriminatedUnion('kind', [z.object({kind:z.literal('memory')}), z.object({kind:z.literal('durable'),status:z.enum(['synced','unconfirmed']),projectPath:z.string()})]), files: z.array(bundleFile).min(1).max(16), scope: z.uuid(), revision: z.number().int().positive(), catalog: z.object({ version: z.string(), rootId: id, documents: z.array(summary).min(1).max(16), issues: z.array(issue) }), documents: z.array(response).min(1).max(16) });
 
 // Zod intentionally omits __proto__ in parsed records. Authored map keys are
 // data here, so validate each value and rebuild with own data properties.

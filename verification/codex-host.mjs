@@ -57,7 +57,7 @@ try{
     await new Promise(resolve=>setTimeout(resolve,250));
   }
   assert(status,'Registered server not found');
-  assert.deepEqual(Object.values(status.tools).map(tool=>tool.name).sort(),['read_docs','replace_docs','show_docs']);
+  assert.deepEqual(Object.values(status.tools).map(tool=>tool.name).sort(),['check_model','read_docs','replace_docs','show_docs']);
   const showTool = Object.values(status.tools).find(tool=>tool.name==='show_docs');
   assert.equal(showTool._meta?.ui?.resourceUri,'ui://nessa-docs/explorer-v1.html');
   assert.deepEqual(showTool._meta?.['openai/ui']?.entrypoints,[{type:'thread'}]);

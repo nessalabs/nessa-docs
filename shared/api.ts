@@ -1,6 +1,8 @@
 // The wire contract between the local API (server/) and the browser (src/).
 // Types only: every rule that produces these values lives in server/.
 
+import type { ModelCheckRecord, ModelLink } from './model-check.js';
+
 export const DOCUMENT_KINDS = [
   'system',
   'service',
@@ -30,6 +32,12 @@ export interface DocumentSummary {
   readonly children: readonly string[];
   /** Repository-relative path of the Markdown file, e.g. `docs/state/services/chat/README.md`. */
   readonly file: string;
+  /** Linked TLA+ model, when this page has one. */
+  readonly model?: ModelLink;
+  /** Last finished rule check saved on the page. */
+  readonly modelCheck?: ModelCheckRecord;
+  /** True when the saved check does not match the current checkpoint or model bytes. */
+  readonly modelCheckStale?: boolean;
 }
 
 /** Why a file was rejected (`error`) or accepted with a caveat (`warning`). */
@@ -65,7 +73,9 @@ export type IssueCode =
   | 'ambiguous-detail-edge'
   | 'unknown-detail-section'
   | 'ambiguous-detail-section'
-  | 'duplicate-detail-selector';
+  | 'duplicate-detail-selector'
+  | 'missing-model-file'
+  | 'duplicate-model';
 
 export type IssueSeverity = 'error' | 'warning';
 

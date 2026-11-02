@@ -20,7 +20,12 @@ export async function verifyProtocol() {
     const client = await connectDocs(ui);
     try {
       const { tools } = await client.listTools();
-      assert.deepEqual(tools.map((tool) => tool.name).sort(), ['read_docs', 'replace_docs', 'show_docs']);
+      assert.deepEqual(tools.map((tool) => tool.name).sort(), ['check_model', 'read_docs', 'replace_docs', 'show_docs']);
+      const checker = await client.callTool({ name: 'check_model', arguments: { action: 'status' } });
+      assert.equal(checker.isError, undefined, JSON.stringify(checker));
+      assert.ok(['not-installed', 'ready', 'failed', 'downloading'].includes(checker.structuredContent.state));
+      const missing = await client.callTool({ name: 'check_model', arguments: {} });
+      assert.equal(missing.isError, true);
       const show = tools.find((tool) => tool.name === 'show_docs');
       assert.equal(show._meta?.ui?.resourceUri, 'ui://nessa-docs/explorer-v1.html');
       assert.deepEqual(show._meta?.['openai/ui']?.entrypoints, [{ type: 'thread' }]);

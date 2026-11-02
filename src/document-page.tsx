@@ -21,6 +21,8 @@ import { AppLink, documentPath, navigate, scrollToHash, useSearchAndHash } from 
 import { Titlebar } from './shell';
 import { plainText } from '../shared/markdown';
 import { DocumentStatusLabel, IconButton, QuietButton, SegmentedControl, SegmentedControlOption } from './ui';
+import { RuleBadge, RuleCheckControls, RulePath } from './rule-check';
+import type { ProjectReads } from './project-opening/read-port';
 import { useEscapeLayer } from './layers';
 import { useNarrow } from './viewport';
 
@@ -78,7 +80,7 @@ export function DocumentPage(props: { id: string; catalogVersion: string; onStal
     );
   }
   if (state.kind === 'unknown') return <UnknownDocument response={state.response} />;
-  return <DocumentView key={`${state.id}:${state.response.version}`} response={state.response} focusOnLoad={focusOnLoad} />;
+  return <DocumentView key={`${state.id}:${state.response.version}`} response={state.response} focusOnLoad={focusOnLoad} onChecked={() => setAttempt((n) => n + 1)} />;
 }
 
 type View = 'diagrams' | 'details';
@@ -123,7 +125,7 @@ export function chooseView(search: string, hash: string, hasDiagrams: boolean): 
 
 const NO_DETAILS: readonly DiagramDetailEntry[] = [];
 
-function DocumentView({ response, focusOnLoad }: { response: DocumentResponse; focusOnLoad: boolean }) {
+function DocumentView({ response, focusOnLoad, onChecked }: { response: DocumentResponse; focusOnLoad: boolean; onChecked: () => void }) {
   const { document, breadcrumbs, children, sources, issues } = response;
   // Closed on every document: DocumentView is keyed by document, so this starts false each time.
   const [provenanceOpen, setProvenanceOpen] = useState(false);
@@ -171,6 +173,14 @@ function DocumentView({ response, focusOnLoad }: { response: DocumentResponse; f
   const appearance = useAppearance();
   const narrow = useNarrow();
   const [selected, setSelected] = useState<number | null>(null);
+  const [ruleNode, setRuleNode] = useState<string | null>(null);
+  const ruleMarks = useMemo(() => {
+    const marks = new Map<string, { rule: string; path: readonly string[] }[]>();
+    for (const item of response.document.modelCheck?.broke ?? []) {
+      for (const state of item.states) marks.set(state, [...(marks.get(state) ?? []), { rule: item.rule, path: item.path }]);
+    }
+    return marks;
+  }, [response.document.modelCheck]);
   const [expandedCharts, setExpandedCharts] = useState(0);
   const invoker = useRef<Element | null>(null);
   // Where focus goes once the inspector has closed: the element it came from, or the link's destination.
@@ -243,6 +253,8 @@ function DocumentView({ response, focusOnLoad }: { response: DocumentResponse; f
       onSelectDetail={selectDetail}
       onExpandedChange={onExpandedChange}
       revealLeftOf={selection?.detail.diagram === index && !narrow ? paneLeft : null}
+      ruleMarks={ruleMarks}
+      onSelectRule={setRuleNode}
     />
   );
 
@@ -355,6 +367,7 @@ function DocumentView({ response, focusOnLoad }: { response: DocumentResponse; f
               >
                 {document.sourceRevision ? `Reviewed at ${document.sourceRevision.slice(0, 12)}` : 'Source revision not recorded'}
               </button>
+              <RuleBadge revision={document.modelCheck?.sourceRevision} stale={document.modelCheckStale} />
               {issues.length > 0 ? (
                 <button type="button" className="meta-warning" onClick={openProvenance} aria-controls={provenanceId}>
                   {issues.length} warning{issues.length === 1 ? '' : 's'}
@@ -370,6 +383,8 @@ function DocumentView({ response, focusOnLoad }: { response: DocumentResponse; f
               <p className="document-summary">{document.summary}</p>
             ) : null}
             {viewSwitch ? <div className="narrow-only view-switch-slot">{viewSwitch}</div> : null}
+            {document.model ? <DocumentRuleCheck id={document.id} onDone={onChecked} /> : null}
+            <RulePath rules={ruleMarks.get(ruleNode ?? '') ?? []} />
           </header>
 
           {view === 'diagrams' ? (
@@ -563,6 +578,71 @@ export function IssueList({ title, issues }: { title: string; issues: readonly C
       </ul>
     </section>
   );
+}
+
+function DocumentRuleCheck({ id, onDone }: { id: string; onDone: () => void }) {
+  const reads = useProjectReads();
+  return (
+    <RuleCheckControls
+      onInstall={(report, signal) => installChecker(reads, report, signal)}
+      onCheck={(report, signal) => runCheck(reads, id, signal, report, onDone)}
+    />
+  );
+}
+
+async function installChecker(reads: ProjectReads, report: (message: string) => void, signal: AbortSignal): Promise<string | null> {
+  const outcome = await reads.installChecker(signal);
+  if (signal.aborted) return 'The rule checker download was cancelled.';
+  if (outcome.kind !== 'ok') {
+    const message = outcome.kind === 'failed' ? outcome.message : 'The request failed.';
+    report(message);
+    return message;
+  }
+  const message = outcome.value.message ?? (outcome.value.state === 'ready' ? 'The rule checker is installed.' : 'The rule checker is not installed.');
+  report(message);
+  return message;
+}
+
+async function runCheck(reads: ProjectReads, id: string, signal: AbortSignal, report: (message: string) => void, onDone: () => void) {
+  const started = await reads.startModelCheck(id, signal);
+  if (started.kind !== 'ok') {
+    report(started.kind === 'failed' ? started.message : 'The request failed.');
+    return null;
+  }
+  let view = started.value;
+  report(view.message);
+  while ((view.state === 'running' || view.state === 'downloading') && view.id) {
+    if (signal.aborted) break;
+    try { await waitForPoll(400, signal); } catch { break; }
+    const next = await reads.modelCheckRun(view.id, signal);
+    if (next.kind !== 'ok') {
+      report(next.kind === 'failed' ? next.message : 'The request failed.');
+      return null;
+    }
+    view = next.value;
+    report(view.message);
+  }
+  if (signal.aborted && view.id) {
+    const cancelled = await reads.cancelModelCheck(view.id);
+    return cancelled.kind === 'ok' ? cancelled.value : { id: view.id, state: 'cancelled' as const, message: 'The rule check was cancelled. No rule was marked as held.' };
+  }
+  if (view.result) onDone();
+  return view;
+}
+
+function waitForPoll(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException('The rule check was cancelled.', 'AbortError'));
+    };
+    if (signal.aborted) onAbort();
+    else signal.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 function UnknownDocument({ response }: { response: UnknownDocumentResponse }) {

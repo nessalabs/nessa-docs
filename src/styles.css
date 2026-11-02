@@ -708,6 +708,45 @@ figure {
 .document-meta [data-slot='status-label'] {
   font-size: var(--text-ui);
 }
+.meta-rule {
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--rim);
+  border-radius: 999px;
+  color: var(--ink);
+}
+.meta-rule-stale {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.rule-check {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+.rule-check-status {
+  flex-basis: 100%;
+  margin: 0;
+}
+.rule-path {
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--warn);
+  border-radius: 0.5rem;
+}
+.rule-path ol {
+  margin: 0.25rem 0 0.75rem;
+  padding-left: 1.25rem;
+}
+.diagram-rule-broken rect,
+.diagram-rule-broken polygon,
+.diagram-rule-broken circle,
+.diagram-rule-broken ellipse,
+.diagram-rule-broken path {
+  stroke: var(--warn);
+  stroke-width: 2.5px;
+}
 .meta-revision {
   padding: 0;
   border: 0;

@@ -9,6 +9,7 @@ import {
   type DocumentStatus,
   type IssueCode,
 } from '../shared/api.js';
+import type { BrokenRule, ModelCheckRecord, ModelLink } from '../shared/model-check.js';
 
 export const DOCUMENT_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_ID_LENGTH = 120;
@@ -29,7 +30,14 @@ const REQUIRED_FIELDS = [
   'diagramLinks',
 ] as const;
 /** Optional details default empty; an absent source revision is unknown. */
-const OPTIONAL_FIELDS = ['diagramDetails', 'sourceRevision'] as const;
+const OPTIONAL_FIELDS = ['diagramDetails', 'sourceRevision', 'model', 'modelCheck'] as const;
+const COMMIT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+const MODEL_SPEC = /^tla(?:\/[A-Za-z0-9_-]+)*\/[A-Za-z0-9_-]+\.tla$/;
+const MODEL_CONFIG = /^tla(?:\/[A-Za-z0-9_-]+)*\/[A-Za-z0-9_-]+\.cfg$/;
+const RULE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const CHECKER_NAME = /^tlc-\d+\.\d+\.\d+$/;
+const CHECK_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
+const DIGEST = /^[0-9a-f]{64}$/;
 
 /** A chart element as an author names it: a state or flowchart node, or a labelled transition or edge between two of them. */
 export type DetailSelector =
@@ -56,6 +64,8 @@ export interface ParsedDocument {
   readonly sources: readonly string[];
   readonly diagramLinks: ReadonlyMap<string, string>;
   readonly diagramDetails: readonly AuthoredDiagramDetail[];
+  readonly model?: ModelLink;
+  readonly modelCheck?: ModelCheckRecord;
   readonly body: string;
 }
 
@@ -164,8 +174,7 @@ function validateFields(fields: Record<string, unknown>, body: string): ParseOut
     invalid('summary', 'a non-empty string', summary);
   }
   const sourceRevision = Object.hasOwn(fields, 'sourceRevision') ? fields.sourceRevision : undefined;
-  if (Object.hasOwn(fields, 'sourceRevision') &&
-      (typeof sourceRevision !== 'string' || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(sourceRevision))) {
+  if (Object.hasOwn(fields, 'sourceRevision') && (typeof sourceRevision !== 'string' || !COMMIT_ID.test(sourceRevision))) {
     invalid('sourceRevision', 'a quoted full lowercase Git commit ID (40 or 64 hexadecimal characters)', sourceRevision);
   }
   const kind = fields.kind;
@@ -229,6 +238,10 @@ function validateFields(fields: Record<string, unknown>, body: string): ParseOut
     }
   }
 
+  const model = Object.hasOwn(fields, 'model') ? readModel(fields.model, invalid) : undefined;
+  const modelCheck = Object.hasOwn(fields, 'modelCheck') ? readModelCheck(fields.modelCheck, invalid) : undefined;
+  if (modelCheck && !model) invalid('modelCheck', 'present only on a page that also has "model"', modelCheck);
+
   const declaredId = isDocumentId(id) ? id : null;
   if (problems.length > 0) return { kind: 'rejected', declaredId, problems: [...problems, ...warnings] };
   return {
@@ -244,10 +257,148 @@ function validateFields(fields: Record<string, unknown>, body: string): ParseOut
       sources,
       diagramLinks,
       diagramDetails,
+      ...(model ? { model } : {}),
+      ...(modelCheck ? { modelCheck } : {}),
       body,
     },
     warnings,
   };
+}
+
+function readModel(
+  value: unknown,
+  invalid: (field: string, expected: string, found: unknown) => void,
+): ModelLink | undefined {
+  if (!isPlainMapping(value)) {
+    invalid('model', 'a mapping { spec, config, steps? }', value);
+    return undefined;
+  }
+  const extra = Object.keys(value).filter((key) => !['spec', 'config', 'steps'].includes(key));
+  if (extra.length > 0) invalid('model', `only spec, config, and steps (found ${extra.join(', ')})`, value);
+  const { spec, config } = value;
+  if (typeof spec !== 'string' || !MODEL_SPEC.test(spec)) invalid('model.spec', 'a docs/state-relative path under tla/ ending in .tla', spec);
+  if (typeof config !== 'string' || !MODEL_CONFIG.test(config)) invalid('model.config', 'a docs/state-relative path under tla/ ending in .cfg', config);
+  const steps: Record<string, string> = {};
+  let stepsOk = true;
+  if (Object.hasOwn(value, 'steps')) {
+    if (!isPlainMapping(value.steps)) {
+      invalid('model.steps', 'a mapping of TLC action names to one sentence each', value.steps);
+      stepsOk = false;
+    } else {
+      const entries = Object.entries(value.steps);
+      if (entries.length > 40) {
+        invalid('model.steps', 'at most 40 actions', `${entries.length} actions`);
+        stepsOk = false;
+      }
+      for (const [key, sentence] of entries) {
+        if (!RULE_NAME.test(key) || key.length > 80) invalid(`model.steps.${key}`, 'a TLC action name', key);
+        else if (typeof sentence !== 'string' || sentence.trim() === '' || sentence.length > 200 || /[\r\n]/.test(sentence)) {
+          invalid(`model.steps.${key}`, 'one plain sentence (1–200 characters, one line)', sentence);
+        } else steps[key] = sentence;
+      }
+    }
+  }
+  if (typeof spec !== 'string' || !MODEL_SPEC.test(spec) || typeof config !== 'string' || !MODEL_CONFIG.test(config) || !stepsOk) return undefined;
+  return { spec, config, steps };
+}
+
+function readModelCheck(
+  value: unknown,
+  invalid: (field: string, expected: string, found: unknown) => void,
+): ModelCheckRecord | undefined {
+  if (!isPlainMapping(value)) {
+    invalid('modelCheck', 'a mapping of the last checker result', value);
+    return undefined;
+  }
+  const allowed = ['sourceRevision', 'checker', 'date', 'config', 'modelDigest', 'states', 'held', 'broke', 'unchecked'];
+  const extra = Object.keys(value).filter((key) => !allowed.includes(key));
+  if (extra.length > 0) invalid('modelCheck', `only ${allowed.join(', ')} (found ${extra.join(', ')})`, value);
+  const sourceRevision = Object.hasOwn(value, 'sourceRevision') ? value.sourceRevision : undefined;
+  if (sourceRevision !== undefined && (typeof sourceRevision !== 'string' || !COMMIT_ID.test(sourceRevision))) {
+    invalid('modelCheck.sourceRevision', 'a quoted full lowercase Git commit ID, or omit it', sourceRevision);
+  }
+  if (typeof value.checker !== 'string' || !CHECKER_NAME.test(value.checker)) invalid('modelCheck.checker', 'tlc-<major.minor.patch>', value.checker);
+  if (typeof value.date !== 'string' || !CHECK_DATE.test(value.date)) invalid('modelCheck.date', 'a UTC timestamp such as 2026-11-02T08:12:00.000Z', value.date);
+  if (typeof value.config !== 'string' || !MODEL_CONFIG.test(value.config)) invalid('modelCheck.config', 'the config path that was checked', value.config);
+  if (typeof value.modelDigest !== 'string' || !DIGEST.test(value.modelDigest)) invalid('modelCheck.modelDigest', 'a lowercase SHA-256 hex digest', value.modelDigest);
+  if (!Number.isInteger(value.states) || (value.states as number) < 0 || (value.states as number) > 1_000_000) {
+    invalid('modelCheck.states', 'an integer from 0 to 1000000', value.states);
+  }
+  const held = ruleList(value.held, 'modelCheck.held', invalid);
+  const unchecked = ruleList(value.unchecked, 'modelCheck.unchecked', invalid);
+  const broke = brokenRules(value.broke, invalid);
+  if (
+    typeof value.checker !== 'string' || !CHECKER_NAME.test(value.checker) ||
+    typeof value.date !== 'string' || !CHECK_DATE.test(value.date) ||
+    typeof value.config !== 'string' || !MODEL_CONFIG.test(value.config) ||
+    typeof value.modelDigest !== 'string' || !DIGEST.test(value.modelDigest) ||
+    !Number.isInteger(value.states) || held === null || unchecked === null || broke === null ||
+    (sourceRevision !== undefined && (typeof sourceRevision !== 'string' || !COMMIT_ID.test(sourceRevision)))
+  ) return undefined;
+  return {
+    ...(typeof sourceRevision === 'string' ? { sourceRevision } : {}),
+    checker: value.checker,
+    date: value.date,
+    config: value.config,
+    modelDigest: value.modelDigest,
+    states: value.states as number,
+    held,
+    broke,
+    unchecked,
+  };
+}
+
+function ruleList(
+  value: unknown,
+  field: string,
+  invalid: (field: string, expected: string, found: unknown) => void,
+): string[] | null {
+  if (!Array.isArray(value)) {
+    invalid(field, 'a list of rule names', value);
+    return null;
+  }
+  if (value.length > 50) {
+    invalid(field, 'at most 50 rule names', `${value.length} names`);
+    return null;
+  }
+  const names: string[] = [];
+  for (const [index, name] of value.entries()) {
+    if (typeof name !== 'string' || !RULE_NAME.test(name)) invalid(`${field}[${index}]`, 'a TLC rule name', name);
+    else names.push(name);
+  }
+  return names.length === value.length ? names : null;
+}
+
+function brokenRules(
+  value: unknown,
+  invalid: (field: string, expected: string, found: unknown) => void,
+): BrokenRule[] | null {
+  if (!Array.isArray(value)) {
+    invalid('modelCheck.broke', 'a list of { rule, path, states }', value);
+    return null;
+  }
+  if (value.length > 50) {
+    invalid('modelCheck.broke', 'at most 50 broken rules', `${value.length} rules`);
+    return null;
+  }
+  const rules: BrokenRule[] = [];
+  for (const [index, entry] of value.entries()) {
+    const field = `modelCheck.broke[${index}]`;
+    if (!isPlainMapping(entry)) {
+      invalid(field, 'a mapping { rule, path, states }', entry);
+      continue;
+    }
+    const path = entry.path;
+    const states = entry.states;
+    const ruleOk = typeof entry.rule === 'string' && RULE_NAME.test(entry.rule);
+    const pathOk = Array.isArray(path) && path.length > 0 && path.length <= 30 && path.every((step) => typeof step === 'string' && step.trim() !== '' && step.length <= 200 && !/[\r\n]/.test(step));
+    const statesOk = Array.isArray(states) && states.length <= 20 && states.every((state) => typeof state === 'string' && DIAGRAM_NODE_ID.test(state));
+    if (!ruleOk) invalid(`${field}.rule`, 'a TLC rule name', entry.rule);
+    if (!pathOk) invalid(`${field}.path`, 'one or more plain sentences', path);
+    if (!statesOk) invalid(`${field}.states`, 'a list of diagram state ids', states);
+    if (ruleOk && pathOk && statesOk) rules.push({ rule: entry.rule as string, path: path as string[], states: states as string[] });
+  }
+  return rules.length === value.length ? rules : null;
 }
 
 const DETAIL_SHAPE =

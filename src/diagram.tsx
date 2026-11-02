@@ -350,6 +350,8 @@ export function Diagram({
   onExpandedChange,
   onNavigateDocument,
   revealLeftOf = null,
+  ruleMarks,
+  onSelectRule,
 }: {
   source: string;
   links: Readonly<Record<string, Crumb>>;
@@ -367,9 +369,14 @@ export function Diagram({
   onNavigateDocument?: (id: string) => void;
   /** Where the open inspector begins on screen (viewport x), when it covers the right of this chart. */
   revealLeftOf?: number | null;
+  /** Diagram node id → rules that fail in that state. */
+  ruleMarks?: ReadonlyMap<string, readonly { rule: string; path: readonly string[] }[]>;
+  onSelectRule?: (nodeId: string) => void;
 }) {
   const navigateDocument = useRef(onNavigateDocument);
   navigateDocument.current = onNavigateDocument;
+  const selectRule = useRef(onSelectRule);
+  selectRule.current = onSelectRule;
   const appearance = useAppearance();
   const [state, setState] = useState<DiagramState>({ kind: 'rendering' });
   const [zoom, setZoom] = useState<Zoom>({ mode: 'readable' });
@@ -461,6 +468,23 @@ export function Diagram({
     }
     let linkedCount = 0;
     let explainedCount = 0;
+    let brokenCount = 0;
+    for (const [node, elements] of nodes) {
+      const marks = ruleMarks?.get(node);
+      if (!marks || marks.length === 0) continue;
+      brokenCount += 1;
+      for (const element of elements) {
+        element.classList.add('diagram-rule-broken');
+        element.setAttribute('data-rule-broken', marks.map((mark) => mark.rule).join(' '));
+        if (!element.hasAttribute('role')) {
+          element.setAttribute('role', 'button');
+          element.setAttribute('tabindex', '0');
+        }
+        const label = element.getAttribute('aria-label');
+        element.setAttribute('aria-label', `${label ? `${label}. ` : ''}Broken rule in ${node}: ${marks.map((mark) => mark.rule).join(', ')}`);
+        activate(element, () => selectRule.current?.(node));
+      }
+    }
     for (const [node, elements] of nodes) {
       // Only nodes the document's diagramLinks or diagramDetails name act; every other node stays inert.
       const target = Object.hasOwn(links, node) ? (links[node] as Crumb) : null;
@@ -540,10 +564,11 @@ export function Diagram({
     }
     // An image's children are presentational, which would hide the controls
     // from assistive technology; a diagram with any is a labelled group.
-    if (linkedCount + explainedCount > 0) {
+    if (linkedCount + explainedCount + brokenCount > 0) {
       const parts = [
         linkedCount > 0 ? `${linkedCount} node${linkedCount === 1 ? '' : 's'} open other documents` : null,
         explainedCount > 0 ? `${explainedCount} element${explainedCount === 1 ? '' : 's'} have details` : null,
+        brokenCount > 0 ? `${brokenCount} state${brokenCount === 1 ? '' : 's'} break a rule` : null,
       ];
       svg.setAttribute('role', 'group');
       svg.setAttribute('aria-label', `Diagram: ${parts.filter(Boolean).join('; ')}`);
@@ -554,7 +579,7 @@ export function Diagram({
       cleanups.forEach((cleanup) => cleanup());
       container.innerHTML = '';
     };
-  }, [state, links, details]);
+  }, [state, links, details, ruleMarks]);
 
   // The open detail is marked in place; selection never re-renders the SVG.
   useLayoutEffect(() => {

@@ -9,6 +9,7 @@ import type { FolderPicker } from './project-opening/folder-picker.js';
 import type { Projects } from './project-opening/projects.js';
 import type { RepositoryFiles } from './files.js';
 import { catalogResponse, documentResponse, MAX_QUERY_LENGTH, searchResponse } from './responses.js';
+import type { ModelCheckService } from './model-check/service.js';
 
 export interface StaticAsset {
   readonly body: Uint8Array;
@@ -25,6 +26,8 @@ export interface HandlerDependencies {
   readonly assets: ReadonlyMap<string, StaticAsset>;
   /** Accepted Host header values; anything else is refused (DNS-rebinding guard). */
   readonly allowedHosts: ReadonlySet<string>;
+  /** Optional rule checker. Absent in tests that do not exercise it. */
+  readonly modelChecks?: ModelCheckService;
 }
 
 export interface Reply {
@@ -70,6 +73,39 @@ export async function handleRequest(
   }
   const path = url.pathname;
 
+  const modelChecks = dependencies.modelChecks;
+  if (modelChecks && request.method === 'GET' && path === '/api/checker') {
+    return json(200, await modelChecks.status());
+  }
+  if (modelChecks && request.method === 'POST' && path === '/api/checker/install') {
+    const refusal = openingGuard(dependencies, request);
+    if (refusal) return refusal;
+    return json(200, await modelChecks.install(request.signal ?? new AbortController().signal));
+  }
+  if (modelChecks && path.startsWith('/api/model-checks/')) {
+    const runId = path.slice('/api/model-checks/'.length);
+    if (request.method === 'GET') {
+      const run = modelChecks.read(runId);
+      return run ? json(200, run) : json(404, { error: 'unknown-run' });
+    }
+    if (request.method === 'DELETE') {
+      if (request.origin !== `http://${request.host?.toLowerCase()}`) return json(403, { error: 'origin-refused' });
+      const run = modelChecks.cancel(runId);
+      return run ? json(200, run) : json(404, { error: 'unknown-run' });
+    }
+  }
+  const modelCheckMatch = modelChecks && request.method === 'POST' ? /^\/api\/documents\/([^/]+)\/model-check$/.exec(path) : null;
+  if (modelCheckMatch && modelChecks) {
+    const refusal = openingGuard(dependencies, request);
+    if (refusal) return refusal;
+    const projectId = url.searchParams.get('project');
+    const selection = dependencies.projects.read(projectId);
+    if (selection.kind !== 'selected') return json(409, { error: selection.kind === 'welcome' ? 'no-project' : 'project-unavailable' });
+    let id: string;
+    try { id = decodeURIComponent(modelCheckMatch[1] ?? ''); } catch { return json(404, { error: 'unknown-document' }); }
+    if (!isDocumentId(id)) return json(404, { error: 'unknown-document', id });
+    return json(200, await modelChecks.start(selection.root, id));
+  }
   if (request.method === 'POST' && (path === '/api/projects' || path === '/api/projects/pick-folder')) {
     const refusal = openingGuard(dependencies, request);
     if (refusal) return refusal;
@@ -167,7 +203,7 @@ export function nodeHandler(dependencies: HandlerDependencies) {
     let reply: Reply;
     try {
       const path = new URL(input.url, 'http://localhost').pathname;
-      const opening = input.method === 'POST' && (path === '/api/projects' || path === '/api/projects/pick-folder');
+      const opening = input.method === 'POST' && (path === '/api/projects' || path === '/api/projects/pick-folder' || path === '/api/checker/install' || /\/api\/documents\/[^/]+\/model-check$/.test(path));
       const refused = opening ? openingGuard(dependencies, input) : null;
       if (refused) reply = refused;
       else if (opening) {
