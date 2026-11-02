@@ -93,6 +93,77 @@ checkout. A checkpoint says what was reviewed, not that tests passed or that
 newer commits are covered. Update it only after reconciling the page's behavior
 against the newer source.
 
+## Optional rule model
+
+A page may link a TLA+ model of its chart. The model is optional. A page
+without one is unchanged, and validation does not require a checker.
+
+Keep the model as files under `docs/state/tla/`, mirroring the page path. For
+`docs/state/services/sdk/attachment.md`:
+
+```text
+docs/state/tla/services/sdk/attachment.tla
+docs/state/tla/services/sdk/attachment.cfg
+```
+
+Link those files from the page. Paths are relative to `docs/state`, stay inside
+`tla/`, and use no `..`. Each spec and each config is linked by exactly one page.
+`validate:docs` reports a missing file or a shared file as an error.
+
+```yaml
+model:
+  spec: tla/services/sdk/attachment.tla
+  config: tla/services/sdk/attachment.cfg
+  steps:
+    Init: Start with the attachment open.
+    Close: Close the attachment.
+    Write: Write bytes.
+```
+
+`steps` is optional. Keys are TLC action names (`Init` is the initial state).
+Values are one plain sentence each. The checker uses them for the failing path.
+Diagram state ids should match the string values the model assigns (for example
+a variable `phase = "Closed"` marks the chart state `Closed`).
+
+The checker writes the last finished result. Do not hand-edit it to claim a
+rule held. A model checks the design, not the code.
+
+```yaml
+modelCheck:
+  sourceRevision: "aa91831b5331d3461969f6a7be723a6d3325f29b"
+  checker: tlc-1.7.4
+  date: "2026-11-02T08:12:00.000Z"
+  config: tla/services/sdk/attachment.cfg
+  modelDigest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  states: 4
+  held:
+    - OnlyOpenOrClosed
+  broke:
+    - rule: NoWriteAfterClose
+      path:
+        - Start with the attachment open.
+        - Close the attachment.
+        - Write bytes.
+      states:
+        - Closed
+  unchecked: []
+```
+
+`sourceRevision`, when present, is quoted and is a full lowercase commit id, the
+same form as the page checkpoint. The checker records the page checkpoint it
+saw, or the repository `HEAD` when the page has no checkpoint. `checker` is
+`tlc-` plus the pinned TLC version. `date` is UTC. `config` is the config path
+that was run. `modelDigest` is the SHA-256 of the spec bytes, a NUL, and the
+config bytes. `states` is how many distinct states the last finished TLC run
+reported. `held`, `broke`, and `unchecked` name TLC invariants and properties.
+A broken rule has a plain-language path and the chart states where it failed.
+A rule that the bound or the timeout did not finish is `unchecked`, never
+`held`.
+
+The chart badge "Rules checked at <short id>" is stale when the page checkpoint
+and `modelCheck.sourceRevision` differ, or when the linked files no longer match
+`modelDigest`.
+
 ## Drill-down
 
 `diagramLinks` maps a Mermaid node ID to an accepted document ID:

@@ -2,7 +2,9 @@
 
 Nessa Docs keeps authored Markdown in the user's project. The separate local
 website reads it and renders diagrams. It has no dependency on the Nessa agent
-backend and does not execute the described state machines.
+backend and does not execute the described state machines. An optional TLC
+check runs a TLA+ model linked from a page. It does not run the documented
+program, and pages without a model skip it.
 
 ## Owners
 
@@ -14,6 +16,7 @@ backend and does not execute the described state machines.
 | `server/files.ts` | Local filesystem adapter for the injected repository-files port; checks reads against the catalog's accepted documentation boundary |
 | `server/path-containment.ts` | The path-containment rule used by the catalog, file reader and link resolver |
 | `server/project-opening/` | Validate chosen folders, retain opened project contexts, supply the local folder chooser, and compose the headless checker |
+| `server/model-check/` | Optional TLC install, bounded rule checks, and the saved `modelCheck` record. See [rule checking](model-check.md) |
 | `server/http.ts`, `main.ts` | Local HTTP transport and process composition |
 | `src/project-opening/read-port.ts` | Framework-independent project source, read contract and outcomes |
 | `src/project-opening/selection.ts` | Checks that a current-project answer belongs to the requested project |

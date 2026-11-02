@@ -248,6 +248,71 @@ export async function loadCatalog(
     }
   }
 
+  // Linked models are real files. A missing file, or two pages sharing one, is an error.
+  const modelFacts = new Map<string, { readonly stale: boolean }>();
+  const linkedBy = new Map<string, { file: string; id: string }[]>();
+  for (const candidate of accepted) {
+    const model = candidate.parsed.model;
+    if (!model) continue;
+    for (const relative of [model.spec, model.config]) {
+      linkedBy.set(relative, [...(linkedBy.get(relative) ?? []), { file: candidate.file, id: candidate.parsed.id }]);
+    }
+  }
+  const drop = new Set<string>();
+  for (const [relative, owners] of linkedBy) {
+    if (owners.length < 2) continue;
+    for (const owner of owners) {
+      drop.add(owner.file);
+      const others = owners.filter((item) => item.file !== owner.file).map((item) => item.file).join(', ');
+      reject(owner.file, 'duplicate-model', `"${relative}" is also linked by ${others}`, owner.id);
+    }
+  }
+  for (const candidate of accepted) {
+    const model = candidate.parsed.model;
+    if (!model || drop.has(candidate.file)) continue;
+    const texts: string[] = [];
+    let missing = false;
+    for (const [label, relative] of [['spec', model.spec], ['config', model.config]] as const) {
+      const absolute = posix.join(state.realPath, relative);
+      const found = await files.inspect(absolute);
+      if (found.kind !== 'file' || !isInside(found.realPath, state.realPath)) {
+        reject(candidate.file, 'missing-model-file', `model.${label} "${relative}" is not a file under ${STATE_DIRECTORY}`, candidate.parsed.id);
+        missing = true;
+        continue;
+      }
+      const read = await files.readText(absolute, limits.maxBytes, state.realPath);
+      if (read.kind !== 'text') {
+        reject(candidate.file, 'missing-model-file', `model.${label} "${relative}" could not be read${read.kind === 'too-large' ? ` (${read.size} bytes)` : ''}`, candidate.parsed.id);
+        missing = true;
+        continue;
+      }
+      texts.push(read.text);
+      version.update(relative).update('\0').update(read.text).update('\0');
+    }
+    if (missing || texts.length !== 2) {
+      drop.add(candidate.file);
+      continue;
+    }
+    const check = candidate.parsed.modelCheck;
+    if (check) {
+      const digest = createHash('sha256').update(texts[0] ?? '').update('\0').update(texts[1] ?? '').digest('hex');
+      const revisionMoved = candidate.parsed.sourceRevision !== undefined && check.sourceRevision !== undefined && candidate.parsed.sourceRevision !== check.sourceRevision;
+      modelFacts.set(candidate.parsed.id, { stale: digest !== check.modelDigest || check.config !== model.config || revisionMoved });
+    }
+  }
+  accepted = accepted.filter((candidate) => !drop.has(candidate.file));
+  let stranded = true;
+  while (stranded) {
+    stranded = false;
+    const ids = new Set(accepted.map((candidate) => candidate.parsed.id));
+    accepted = accepted.filter((candidate) => {
+      if (candidate.parsed.parent === null || ids.has(candidate.parsed.parent)) return true;
+      reject(candidate.file, 'parent-rejected', `parent "${candidate.parsed.parent}" was rejected; fix that document first`, candidate.parsed.id);
+      stranded = true;
+      return false;
+    });
+  }
+
   // The directory tree states the parent too; disagreement is a warning.
   const idByFile = new Map(accepted.map((candidate) => [candidate.file, candidate.parsed.id]));
   const detailsById = new Map<string, readonly DiagramDetail[]>();
@@ -304,9 +369,14 @@ export async function loadCatalog(
   }
   const documents = new Map<string, CatalogDocument>();
   for (const candidate of ordered) {
-    const { id, title, kind, status, summary, sourceRevision, parent, body, sources, diagramLinks } = candidate.parsed;
+    const { id, title, kind, status, summary, sourceRevision, parent, body, sources, diagramLinks, model, modelCheck } = candidate.parsed;
+    const stale = modelFacts.get(id);
     documents.set(id, {
-      summary: { id, title, kind, status, summary, ...(sourceRevision ? { sourceRevision } : {}), parent, children: children.get(id) ?? [], file: candidate.file },
+      summary: {
+        id, title, kind, status, summary, ...(sourceRevision ? { sourceRevision } : {}), parent, children: children.get(id) ?? [], file: candidate.file,
+        ...(model ? { model } : {}),
+        ...(modelCheck ? { modelCheck, modelCheckStale: stale?.stale ?? true } : {}),
+      },
       body,
       sources,
       diagramLinks,

@@ -13,6 +13,8 @@ import { createProjects } from './project-opening/projects.js';
 import { HOST, readConfig } from './config.js';
 import { nodeRepositoryFiles } from './files.js';
 import { nodeHandler, type StaticAsset } from './http.js';
+import { createCheckerCache } from './model-check/cache.js';
+import { createModelCheckService } from './model-check/service.js';
 
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -61,6 +63,14 @@ const clientDirectory = fileURLToPath(new URL('../../client/', import.meta.url))
 const projects = createProjects({ loadCatalog: (root) => loadCatalog(files, root), mintId: randomUUID });
 await projects.start(project);
 const exampleRoot = fileURLToPath(new URL('../../../examples/store/', import.meta.url));
+const checker = createCheckerCache();
+const modelChecks = createModelCheckService({
+  files,
+  loadCatalog: (root) => loadCatalog(files, root),
+  runtime: () => checker.runtime(),
+  status: () => checker.status(),
+  install: (signal) => checker.install(signal),
+});
 const shutdown = new AbortController();
 const folderPicker = createFolderPicker(process.platform === 'darwin' ? macFolderDialog(nodeMacDialogProcesses()) : null, shutdown.signal);
 const server = createServer(
@@ -72,6 +82,7 @@ const server = createServer(
     files,
     assets: readClientAssets(clientDirectory),
     allowedHosts: new Set([`127.0.0.1:${port}`, `localhost:${port}`]),
+    modelChecks,
   }),
 );
 server.listen(port, HOST, () => {

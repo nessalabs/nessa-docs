@@ -4,6 +4,7 @@
 import type { ProjectOutcome, FolderPickOutcome, FolderPickerStatus } from '../shared/projects';
 import type { Fetched, ProjectSource } from './project-opening/read-port';
 import type { CatalogResponse, DocumentResponse, SearchResponse, UnknownDocumentResponse } from '../shared/api';
+import type { CheckerStatus, ModelCheckRunView } from '../shared/model-check';
 
 async function getJson<T>(path: string, signal: AbortSignal | undefined, request: typeof fetch): Promise<Fetched<T>> {
   let response: Response;
@@ -65,7 +66,35 @@ export function createHttpProjectSource(request: typeof fetch): ProjectSource {
         catalog: (signal) => getJson<CatalogResponse>(scoped('/api/catalog'), signal, request),
         document: (doc, signal) => getJson<DocumentResponse>(scoped(`/api/documents/${encodeURIComponent(doc)}`), signal, request),
         search: (query, signal) => getJson<SearchResponse>(scoped(`/api/search?q=${encodeURIComponent(query)}`), signal, request),
+        checker: (signal) => getJson<CheckerStatus>('/api/checker', signal, request),
+        installChecker: (signal) => postJson<CheckerStatus>('/api/checker/install', 'POST', signal, request),
+        startModelCheck: (doc, signal) => postJson<ModelCheckRunView>(scoped(`/api/documents/${encodeURIComponent(doc)}/model-check`), 'POST', signal, request),
+        modelCheckRun: (runId, signal) => getJson<ModelCheckRunView>(scoped(`/api/model-checks/${encodeURIComponent(runId)}`), signal, request),
+        cancelModelCheck: (runId, signal) => postJson<ModelCheckRunView>(scoped(`/api/model-checks/${encodeURIComponent(runId)}`), 'DELETE', signal, request),
       };
     },
+    checker: (signal) => getJson<CheckerStatus>('/api/checker', signal, request),
+    installChecker: (signal) => postJson<CheckerStatus>('/api/checker/install', 'POST', signal, request),
   };
+}
+
+async function postJson<T>(path: string, method: 'POST' | 'DELETE', signal: AbortSignal | undefined, request: typeof fetch): Promise<Fetched<T>> {
+  let response: Response;
+  try {
+    response = await request(path, {
+      method,
+      signal,
+      headers: { Accept: 'application/json', ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}) },
+      ...(method === 'POST' ? { body: '{}' } : {}),
+    });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return { kind: 'failed', message: 'The local server did not answer. Is `npm start` still running?' };
+  }
+  if (!response.ok) return { kind: 'failed', message: `The server answered ${response.status} for ${path}` };
+  try { return { kind: 'ok', value: (await response.json()) as T }; }
+  catch (error) {
+    if (signal?.aborted) throw error;
+    return { kind: 'failed', message: 'The server returned an unreadable response. Try again.' };
+  }
 }

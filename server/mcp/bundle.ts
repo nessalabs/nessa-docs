@@ -10,9 +10,23 @@ import type { DocumentResponse } from '../../shared/api.js';
 import type { BundleSnapshot } from '../../shared/mcp.js';
 
 export const bundlePath = z.string().max(200).regex(/^docs\/state\/(?:[a-zA-Z0-9_-]+\/)*(?:README|[a-zA-Z0-9_-]+)\.md$/);
-const authoredMarkdown = z.string().max(65536).refine((text) => Buffer.from(text, 'utf8').toString('utf8') === text, 'Markdown must contain well-formed Unicode that round-trips as UTF-8.');
-const authoredFiles = z.array(z.object({ path: bundlePath, markdown: authoredMarkdown }).strict()).min(1).max(16);
+export const modelPath = z.string().max(200).regex(/^docs\/state\/tla\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\.(?:tla|cfg)$/);
+const authoredText = z.string().max(65536).refine((text) => Buffer.from(text, 'utf8').toString('utf8') === text, 'Text must contain well-formed Unicode that round-trips as UTF-8.');
+const markdownFile = z.object({
+  path: bundlePath.describe('Bundle-relative Markdown path. Include docs/state/README.md as the system root.'),
+  markdown: authoredText.describe('Complete Nessa Docs Markdown including YAML frontmatter.'),
+}).strict();
+const modelFile = z.object({
+  path: modelPath.describe('TLA+ spec or TLC config under docs/state/tla/, mirroring the page path.'),
+  text: authoredText.describe('The complete .tla or .cfg file.'),
+}).strict();
+export const bundleFileSchema = z.union([markdownFile, modelFile]);
+const authoredFiles = z.array(bundleFileSchema).min(1).max(16);
 export const storedBundleSchema = z.object({ scope: z.uuid(), revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER), files: authoredFiles }).strict();
+export type BundleFile = z.infer<typeof bundleFileSchema>;
+export function bundleFileText(file: BundleFile): string {
+  return 'markdown' in file ? file.markdown : file.text;
+}
 export type StoredBundle = z.infer<typeof storedBundleSchema>;
 export type CommitOutcome =
   | { readonly kind: 'committed'; readonly durable: boolean; readonly projectPath: string }
@@ -26,15 +40,12 @@ export interface BundlePersistence {
 
 export const bundleInput = z.object({
   expectedRevision: z.number().int().min(0).describe('0 only for an empty bundle; otherwise read_docs returns the current revision, including after a durable-store restart.'),
-  files: z.array(z.object({
-    path: bundlePath.describe('Bundle-relative path. Include docs/state/README.md as the system root.'),
-    markdown: authoredMarkdown.describe('Complete Nessa Docs Markdown including YAML frontmatter: id, title, kind, status, summary, parent, sources, diagramLinks. Use status fixture/proposed for synthetic content; Mermaid fences hold diagrams.'),
-  }).strict()).min(1).max(16),
+  files: z.array(bundleFileSchema).min(1).max(16).describe('Every page, plus any linked .tla and .cfg files. Model files count toward the 16-file limit.'),
 }).strict();
 
 /** A closed virtual repository: only submitted Markdown exists, never laptop paths. */
-function bundleFiles(entries: readonly { path: string; markdown: string }[]): RepositoryFiles {
-  const texts = new Map(entries.map(({ path, markdown }) => [`/bundle/${path}`, markdown]));
+function bundleFiles(entries: readonly BundleFile[]): RepositoryFiles {
+  const texts = new Map(entries.map((file) => [`/bundle/${file.path}`, bundleFileText(file)]));
   const directories = new Set(['/bundle']);
   for (const path of texts.keys()) {
     for (let parent = posix.dirname(path); parent !== '/'; parent = posix.dirname(parent)) directories.add(parent);
@@ -101,7 +112,7 @@ export class DocumentBundle {
         directories.set(parent.toLowerCase(), parent);
       }
     }
-    if (entries.reduce((total, file) => total + Buffer.byteLength(file.markdown), 0) > 256 * 1024) throw new Error('Bundle exceeds 256 KiB.');
+    if (entries.reduce((total, file) => total + Buffer.byteLength(bundleFileText(file)), 0) > 256 * 1024) throw new Error('Bundle exceeds 256 KiB.');
     const files = bundleFiles(entries);
     const catalog = await loadCatalog(files, '/bundle');
     if (!catalog.rootId || catalog.issues.some((issue) => issue.severity === 'error')) {

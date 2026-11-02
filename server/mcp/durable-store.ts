@@ -5,14 +5,14 @@ import { constants, type Stats } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { z } from 'zod';
-import { bundlePath, storedBundleSchema, type BundlePersistence, type CommitOutcome, type StoredBundle } from './bundle.js';
+import { bundleFileText, bundlePath, modelPath, storedBundleSchema, type BundlePersistence, type CommitOutcome, type StoredBundle } from './bundle.js';
 
 type Io = Pick<typeof fs, 'open' | 'mkdir' | 'lstat' | 'realpath' | 'readdir' | 'rename' | 'unlink' | 'rmdir'>;
 export const storeIo: Io = fs;
 const markerSchema = z.object({ format: z.literal('nessa-docs'), version: z.literal(1), scope: z.uuid() }).strict();
 const descriptorSchema = z.object({
   generation: z.uuid().regex(/^[a-f0-9-]+$/), scope: z.uuid(), revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
-  files: z.array(z.object({ path: bundlePath, bytes: z.number().int().min(0).max(256 * 1024), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict()).min(1).max(16),
+  files: z.array(z.object({ path: z.union([bundlePath, modelPath]), bytes: z.number().int().min(0).max(256 * 1024), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict()).min(1).max(16),
 }).strict();
 const manifestSchema = z.object({ version: z.literal(1), current: descriptorSchema, previous: descriptorSchema.nullable() }).strict();
 type Descriptor = z.infer<typeof descriptorSchema>;
@@ -164,7 +164,7 @@ export class DurableBundleStore implements BundlePersistence {
     for (const file of descriptor.files) {
       const markdown = await this.read(join(generation, file.path), Math.min(file.bytes, 256 * 1024));
       if (Buffer.byteLength(markdown) !== file.bytes || hash(markdown) !== file.sha256) throw new Error('Committed Markdown failed its size/hash check.');
-      files.push({ path: file.path, markdown });
+      files.push(file.path.endsWith('.md') ? { path: file.path, markdown } : { path: file.path, text: markdown });
     }
     this.current = manifest;
     await this.syncDirectory(this.directory);
@@ -182,7 +182,7 @@ export class DurableBundleStore implements BundlePersistence {
     if (!this.loaded) return { kind: 'unchanged', message: 'Open and restore the store before writing.' };
     const state = storedBundleSchema.parse(raw);
     if (state.scope !== this.scope || state.revision !== (this.current?.current.revision ?? 0) + 1) return { kind: 'unchanged', message: 'Durable store revision or owner conflict. Read and reconcile.' };
-    const descriptor = descriptorSchema.parse({ scope: state.scope, revision: state.revision, generation: randomUUID(), files: state.files.map(({ path, markdown }) => ({ path, bytes: Buffer.byteLength(markdown), sha256: hash(markdown) })) });
+    const descriptor = descriptorSchema.parse({ scope: state.scope, revision: state.revision, generation: randomUUID(), files: state.files.map((file) => ({ path: file.path, bytes: Buffer.byteLength(bundleFileText(file)), sha256: hash(bundleFileText(file)) })) });
     const generation = join(this.directory, 'generations', descriptor.generation);
     const temp = join(this.directory, `.manifest-${randomUUID()}.tmp`);
     const next = this.checkManifest({ version: 1, current: descriptor, previous: this.current?.current ?? null });
@@ -199,7 +199,7 @@ export class DurableBundleStore implements BundlePersistence {
           directory = join(directory, component);
           if (!directories.has(directory)) { await this.io.mkdir(directory, { mode: 0o700 }); directories.add(directory); }
         }
-        await this.writeExclusive(join(generation, file.path), file.markdown);
+        await this.writeExclusive(join(generation, file.path), bundleFileText(file));
       }
       for (const directory of [...directories].sort((a, b) => b.length - a.length)) await this.syncDirectory(directory);
       await this.syncDirectory(join(this.directory, 'generations'));

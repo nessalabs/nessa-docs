@@ -7,6 +7,8 @@ import { collectHeadings, MarkdownBody } from '../markdown';
 import { Diagram } from '../diagram';
 import { setAppearance } from '../appearance';
 import { snapshotFromResult } from '../../shared/mcp-payload';
+import { RuleBadge, RuleCheckControls, RulePath } from '../rule-check';
+import type { ModelCheckRunView } from '../../shared/model-check';
 import '../styles.css';
 import './styles.css';
 
@@ -24,7 +26,8 @@ function accept(value: unknown) {
 app.ontoolresult = (result) => {
   try {
     if (result.isError) throw new Error('The document tool failed. Ask the model to retry.');
-    if ((result.structuredContent as { snapshot?: unknown } | undefined)?.snapshot === null) return;
+    const snapshot = (result.structuredContent as { snapshot?: unknown } | undefined)?.snapshot;
+    if (snapshot === null || snapshot === undefined) return;
     accept(result.structuredContent);
   } catch (error) { report(error instanceof Error ? error.message : 'Invalid document result.'); }
 };
@@ -41,6 +44,7 @@ function Explorer() {
   const [fragment, setFragment] = useState<string | null>(null);
   const [view, setView] = useState<'diagrams' | 'details'>('diagrams');
   const [error, setError] = useState('');
+  const [ruleNode, setRuleNode] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   publish = (next) => {
     setSnapshot(next);
@@ -54,6 +58,13 @@ function Explorer() {
   const sections = useMemo(() => markdownSections(tokens), [tokens]);
   const detailEntries = useMemo(() => doc?.diagramDetails.map((detail, key) => ({ key, detail })) ?? [], [doc]);
   const diagrams = useMemo(() => markdownDiagrams(tokens), [tokens]);
+  const ruleMarks = useMemo(() => {
+    const marks = new Map<string, { rule: string; path: readonly string[] }[]>();
+    for (const item of doc?.document.modelCheck?.broke ?? []) {
+      for (const state of item.states) marks.set(state, [...(marks.get(state) ?? []), { rule: item.rule, path: item.path }]);
+    }
+    return marks;
+  }, [doc?.document.modelCheck]);
   const detailsByDiagram = useMemo(() => diagrams.map((_, index) => detailEntries.filter((entry) => entry.detail.diagram === index)), [diagrams, detailEntries]);
   const detailEntry = detailEntries.find((entry) => entry.key === detailKey);
   const detailSection = detailEntry?.detail.section.index ?? null;
@@ -98,6 +109,16 @@ function Explorer() {
     } catch (error) { if (current === requested) setError(error instanceof Error ? error.message : 'Refresh failed.'); }
     finally { setBusy(false); }
   }
+  async function callCheck(args: Record<string, unknown>, signal: AbortSignal): Promise<ModelCheckRunView | null> {
+    const result = await app.callServerTool({ name: 'check_model', arguments: args }, { signal });
+    if (result.isError) {
+      const text = result.content.find((item) => item.type === 'text')?.text ?? 'The rule check failed.';
+      return { id: '', state: 'failed', message: text };
+    }
+    const body = result.structuredContent as { state?: ModelCheckRunView['state']; message?: string; result?: ModelCheckRunView['result'] } | undefined;
+    if (!body?.state || !body.message) return { id: '', state: 'failed', message: 'The rule check returned nothing. Nothing was marked as held.' };
+    return { id: '', state: body.state, message: body.message, ...(body.result ? { result: body.result } : {}) };
+  }
   function link(event: MouseEvent) {
     const anchor = (event.target as Element).closest('a');
     if (!anchor) return;
@@ -121,11 +142,21 @@ function Explorer() {
     {!doc ? <p role="status">Ask the model to create a document bundle, then show it here.</p> : <>
       <nav aria-label="Documents">{snapshot?.catalog.documents.map((entry) => <button key={entry.id} aria-current={entry.id === doc.document.id ? 'page' : undefined} onClick={() => choose(entry.id)}>{entry.title}</button>)}</nav>
       <article key={`${doc.document.id}:${snapshot?.revision}`}>
-        <h1>{doc.document.title}</h1><p>{doc.document.summary}</p><p className="mcp-provenance">{doc.document.status}{doc.document.sourceRevision ? ` · Reviewed at ${doc.document.sourceRevision}` : ' · Source revision not recorded'}</p>
+        <h1>{doc.document.title}</h1><p>{doc.document.summary}</p><p className="mcp-provenance">{doc.document.status}{doc.document.sourceRevision ? ` · Reviewed at ${doc.document.sourceRevision.slice(0, 12)}` : ' · Source revision not recorded'} <RuleBadge revision={doc.document.modelCheck?.sourceRevision} stale={doc.document.modelCheckStale} /></p>
+        {doc.document.model ? <RuleCheckControls onInstall={async (report, signal) => {
+          const view = await callCheck({ action: 'install' }, signal);
+          report(view?.message ?? 'The rule checker is not installed.');
+          return view?.message ?? null;
+        }} onCheck={async (report, signal) => {
+          const view = await callCheck({ page: doc.document.file }, signal);
+          if (view) report(view.message);
+          return view;
+        }} /> : null}
+        <RulePath rules={ruleMarks.get(ruleNode ?? '') ?? []} />
         <div role="group" aria-label="Document view"><button aria-pressed={view === 'diagrams'} onClick={() => setView('diagrams')}>Diagrams</button><button aria-pressed={view === 'details'} onClick={() => setView('details')}>Details</button></div>
         <div className="mcp-content" data-detail-open={detailSection !== null && sections[detailSection] ? '' : undefined}>
           <div className="mcp-document-view">
-            <MarkdownBody tokens={tokens} slugs={slugs} links={doc.links} className={view === 'diagrams' && diagrams.length > 0 ? 'prose mcp-diagrams' : 'prose'} diagram={(index, source) => <Diagram key={`${index}:${source}`} index={index} source={source} links={doc.diagramLinks} onNavigateDocument={choose} details={detailsByDiagram[index]} selectedDetail={detailKey} onSelectDetail={(key, element) => { detailTrigger.current = element; setDetailKey(key); }} />} />
+            <MarkdownBody tokens={tokens} slugs={slugs} links={doc.links} className={view === 'diagrams' && diagrams.length > 0 ? 'prose mcp-diagrams' : 'prose'} diagram={(index, source) => <Diagram key={`${index}:${source}`} index={index} source={source} links={doc.diagramLinks} onNavigateDocument={choose} details={detailsByDiagram[index]} selectedDetail={detailKey} onSelectDetail={(key, element) => { detailTrigger.current = element; setDetailKey(key); }} ruleMarks={ruleMarks} onSelectRule={setRuleNode} />} />
           </div>
           {detailSection !== null && sections[detailSection] && <section ref={dialog} tabIndex={-1} role="dialog" aria-label="Diagram details" className="mcp-detail" onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); closeDetail(); } }}>
             <button onClick={closeDetail}>Close details</button>
