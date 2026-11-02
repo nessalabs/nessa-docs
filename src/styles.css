@@ -718,6 +718,65 @@ figure {
   color: var(--warn);
   border-color: var(--warn);
 }
+.rule-status-toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.rule-status-toggle:hover {
+  background: var(--hover);
+}
+.rule-status-toggle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.rule-status-toggle svg,
+.rule-status-icon svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.75;
+}
+.rule-status-verified {
+  color: var(--nessa-notification-success);
+}
+.rule-status-broke {
+  color: var(--error);
+}
+.rule-status-open {
+  color: var(--warn);
+}
+.rule-status-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+.rule-status-panel {
+  max-width: 76ch;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--rim);
+  border-radius: var(--radius-panel);
+  background: color-mix(in oklab, var(--foreground) 3%, var(--pane));
+}
+.rule-status-panel p {
+  margin: 0 0 0.5rem;
+}
+.rule-status-panel ol {
+  margin: 0.25rem 0 0.75rem;
+  padding-left: 1.25rem;
+}
+.rule-status-panel .rule-check {
+  margin-top: 0.25rem;
+}
 .rule-check {
   display: flex;
   flex-wrap: wrap;

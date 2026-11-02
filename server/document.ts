@@ -9,7 +9,7 @@ import {
   type DocumentStatus,
   type IssueCode,
 } from '../shared/api.js';
-import { BROKEN_RULE_LIMITS, type BrokenRule, type ModelCheckRecord, type ModelLink } from '../shared/model-check.js';
+import { BROKEN_RULE_LIMITS, type BrokenRule, type CheckStop, type ModelCheckRecord, type ModelLink } from '../shared/model-check.js';
 
 export const DOCUMENT_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_ID_LENGTH = 120;
@@ -310,7 +310,7 @@ function readModelCheck(
     invalid('modelCheck', 'a mapping of the last checker result', value);
     return undefined;
   }
-  const allowed = ['sourceRevision', 'checker', 'date', 'config', 'modelDigest', 'states', 'held', 'broke', 'unchecked'];
+  const allowed = ['sourceRevision', 'checker', 'date', 'config', 'modelDigest', 'states', 'held', 'broke', 'unchecked', 'stop'];
   const extra = Object.keys(value).filter((key) => !allowed.includes(key));
   if (extra.length > 0) invalid('modelCheck', `only ${allowed.join(', ')} (found ${extra.join(', ')})`, value);
   const sourceRevision = Object.hasOwn(value, 'sourceRevision') ? value.sourceRevision : undefined;
@@ -327,12 +327,15 @@ function readModelCheck(
   const held = ruleList(value.held, 'modelCheck.held', invalid);
   const unchecked = ruleList(value.unchecked, 'modelCheck.unchecked', invalid);
   const broke = brokenRules(value.broke, invalid);
+  const stop = Object.hasOwn(value, 'stop') ? value.stop : undefined;
+  if (stop !== undefined && stop !== 'states' && stop !== 'time') invalid('modelCheck.stop', '"states" or "time", or omit it', stop);
   if (
     typeof value.checker !== 'string' || !CHECKER_NAME.test(value.checker) ||
     typeof value.date !== 'string' || !CHECK_DATE.test(value.date) ||
     typeof value.config !== 'string' || !MODEL_CONFIG.test(value.config) ||
     typeof value.modelDigest !== 'string' || !DIGEST.test(value.modelDigest) ||
     !Number.isInteger(value.states) || held === null || unchecked === null || broke === null ||
+    (stop !== undefined && stop !== 'states' && stop !== 'time') ||
     (sourceRevision !== undefined && (typeof sourceRevision !== 'string' || !COMMIT_ID.test(sourceRevision)))
   ) return undefined;
   return {
@@ -345,6 +348,7 @@ function readModelCheck(
     held,
     broke,
     unchecked,
+    ...(stop === 'states' || stop === 'time' ? { stop: stop satisfies CheckStop } : {}),
   };
 }
 

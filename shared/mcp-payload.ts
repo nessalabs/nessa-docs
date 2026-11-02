@@ -10,6 +10,7 @@ const brokenRule = z.object({ rule: z.string(), path: z.array(sentence).min(1).m
 const modelCheck = z.object({
   sourceRevision: z.string().optional(), checker: z.string(), date: z.string(), config: z.string(), modelDigest: z.string(),
   states: z.number().int().nonnegative(), held: z.array(z.string()), broke: z.array(brokenRule), unchecked: z.array(z.string()),
+  stop: z.enum(['states', 'time']).optional(),
 }).strict();
 const summary = z.object({
   id, title: z.string(), kind: z.enum(DOCUMENT_KINDS), status: z.enum(DOCUMENT_STATUSES), summary: z.string(), parent: id.nullable(), children: z.array(id), file: z.string(), sourceRevision: z.string().optional(),

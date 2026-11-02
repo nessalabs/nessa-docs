@@ -47,7 +47,7 @@ const checkOutputSchema = portableSchema(z.object({
   checker: z.object({ state: z.enum(CHECKER_STATES), version: z.string(), cachePath: z.string(), message: z.string().optional() }),
   result: z.object({
     sourceRevision: z.string().optional(), checker: z.string(), date: z.string(), config: z.string(), modelDigest: z.string(),
-    states: z.number(), held: z.array(z.string()), broke: z.array(z.object({ rule: z.string(), path: z.array(z.string().min(1).max(BROKEN_RULE_LIMITS.sentence)).min(1).max(BROKEN_RULE_LIMITS.path), states: z.array(z.string()) })), unchecked: z.array(z.string()),
+    states: z.number(), held: z.array(z.string()), broke: z.array(z.object({ rule: z.string(), path: z.array(z.string().min(1).max(BROKEN_RULE_LIMITS.sentence)).min(1).max(BROKEN_RULE_LIMITS.path), states: z.array(z.string()) })), unchecked: z.array(z.string()), stop: z.enum(['states', 'time']).optional(),
   }).optional(),
   snapshot: snapshotSchema.nullable(),
 }));

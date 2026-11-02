@@ -171,6 +171,7 @@ export function createModelCheckService(options: {
       held: outcome.findings.held,
       broke: outcome.findings.broke,
       unchecked: outcome.findings.unchecked,
+      ...(outcome.findings.stop ? { stop: outcome.findings.stop } : {}),
     };
     try {
       await input.save?.(record);

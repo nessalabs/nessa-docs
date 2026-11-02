@@ -46,6 +46,10 @@ export interface BrokenRule {
   readonly states: readonly string[];
 }
 
+/** Why a run left rules in `unchecked`. */
+export const CHECK_STOPS = ['states', 'time'] as const;
+export type CheckStop = (typeof CHECK_STOPS)[number];
+
 /** Frontmatter `modelCheck`, also the tool and HTTP result body. */
 export interface ModelCheckRecord {
   readonly sourceRevision?: string;
@@ -57,6 +61,8 @@ export interface ModelCheckRecord {
   readonly held: readonly string[];
   readonly broke: readonly BrokenRule[];
   readonly unchecked: readonly string[];
+  /** Set when the state limit or the time limit stopped the run. */
+  readonly stop?: CheckStop;
 }
 
 export interface CheckerStatus {
@@ -79,4 +85,5 @@ export interface RuleFindings {
   readonly held: readonly string[];
   readonly broke: readonly BrokenRule[];
   readonly unchecked: readonly string[];
+  readonly stop?: CheckStop;
 }

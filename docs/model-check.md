@@ -16,7 +16,8 @@ mirroring the page path. The page links them in frontmatter (`model.spec`,
 finished check is `modelCheck` in the same frontmatter: the page's source
 checkpoint, the checker version, the date, the config path, a digest of the
 spec and config bytes, the state count, rules held, rules broken with a
-plain-language path, and rules not checked.
+plain-language path, rules not checked, and whether the state limit or the
+time limit stopped the run.
 
 Those files and the result are committed with the page. TLC and Java are not.
 They download into a per-user cache and are reused when the pinned checksums

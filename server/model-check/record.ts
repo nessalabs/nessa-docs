@@ -27,6 +27,7 @@ export function withModelCheck(markdown: string, record: ModelCheckRecord): stri
     held: [...record.held],
     broke: record.broke.map((item) => ({ rule: item.rule, path: [...item.path], states: [...item.states] })),
     unchecked: [...record.unchecked],
+    ...(record.stop ? { stop: record.stop } : {}),
   });
   const revision = value.get('sourceRevision', true);
   if (revision instanceof Scalar) revision.type = Scalar.QUOTE_DOUBLE;

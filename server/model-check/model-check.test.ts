@@ -146,7 +146,20 @@ describe('checkSpec', () => {
         return { code: null, signal: 'SIGKILL', stdout: '', stderr: '' };
       }),
     });
-    expect(result).toMatchObject({ state: 'not-checked', findings: { held: [], broke: [], unchecked: ['NoWriteAfterClose', 'OnlyOpenOrClosed'] } });
+    expect(result).toMatchObject({ state: 'not-checked', findings: { held: [], broke: [], unchecked: ['NoWriteAfterClose', 'OnlyOpenOrClosed'], stop: 'states' } });
+  });
+
+  it('records a timeout as the stop reason', async () => {
+    const result = await checkSpec({
+      ...base,
+      limits: { maxDistinctStates: 10, timeoutMs: 30 },
+      signal: new AbortController().signal,
+      run: runner(async (_config, signal) => {
+        await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve()));
+        return { code: null, signal: 'SIGKILL', stdout: '', stderr: '' };
+      }),
+    });
+    expect(result).toMatchObject({ state: 'not-checked', findings: { stop: 'time', unchecked: ['NoWriteAfterClose', 'OnlyOpenOrClosed'] } });
   });
 
   it.each(['INVARIANTS', 'PROPERTIES'])('checks the rule on the next line after a broken %s name', async (keyword) => {
@@ -352,6 +365,25 @@ describe('modelCheck frontmatter', () => {
     expect(next).toContain('OnlyOpenOrClosed');
     expect(next).toContain(`sourceRevision: "${'a'.repeat(40)}"`);
     expect(next).toContain('# Attachment');
+  });
+
+  it('keeps a stop reason through the page parser', () => {
+    const page = doc('attachment', 'nessa', { model: { spec: 'tla/attachment.tla', config: 'tla/attachment.cfg', steps: {} } }, '# Attachment\n');
+    const next = withModelCheck(page, {
+      checker: 'tlc-1.7.4',
+      date: '2026-11-02T08:12:00.000Z',
+      config: 'tla/attachment.cfg',
+      modelDigest: 'b'.repeat(64),
+      states: 12,
+      held: [],
+      broke: [],
+      unchecked: ['NoWriteAfterClose'],
+      stop: 'time',
+    });
+    const parsed = parseDocumentFile(next);
+    expect(parsed.kind).toBe('parsed');
+    if (parsed.kind !== 'parsed') return;
+    expect(parsed.document.modelCheck?.stop).toBe('time');
   });
 });
 

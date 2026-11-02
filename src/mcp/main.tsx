@@ -7,7 +7,7 @@ import { collectHeadings, MarkdownBody } from '../markdown';
 import { Diagram } from '../diagram';
 import { setAppearance } from '../appearance';
 import { snapshotFromResult } from '../../shared/mcp-payload';
-import { RuleBadge, RuleCheckControls, RulePath } from '../rule-check';
+import { RuleBadge, RuleCheckControls, RulePath, RuleStatusIcon, ruleVerification, useRuleDisclosure } from '../rule-check';
 import type { ModelCheckRunView } from '../../shared/model-check';
 import '../styles.css';
 import './styles.css';
@@ -65,6 +65,21 @@ function Explorer() {
     }
     return marks;
   }, [doc?.document.modelCheck]);
+  const ruleMark = doc?.document.model
+    ? ruleVerification({ model: true, modelCheck: doc.document.modelCheck, stale: doc.document.modelCheckStale })
+    : null;
+  const pagePath = doc?.document.file;
+  const rules = useRuleDisclosure(ruleMark, doc?.document.model && pagePath ? (
+    <RuleCheckControls onInstall={async (report, signal) => {
+      const view = await callCheck({ action: 'install' }, signal);
+      report(view?.message ?? 'The rule checker is not installed.');
+      return view?.message ?? null;
+    }} onCheck={async (report, signal) => {
+      const view = await callCheck({ page: pagePath }, signal);
+      if (view) report(view.message);
+      return view;
+    }} />
+  ) : null, doc?.document.id);
   const detailsByDiagram = useMemo(() => diagrams.map((_, index) => detailEntries.filter((entry) => entry.detail.diagram === index)), [diagrams, detailEntries]);
   const detailEntry = detailEntries.find((entry) => entry.key === detailKey);
   const detailSection = detailEntry?.detail.section.index ?? null;
@@ -140,18 +155,10 @@ function Explorer() {
     {snapshot?.storage.kind === 'durable' && <p className="mcp-provenance">Standalone snapshot (refresh for current path): <code>{snapshot.storage.projectPath}</code></p>}
     {error && <p role="alert">{error}</p>}
     {!doc ? <p role="status">Ask the model to create a document bundle, then show it here.</p> : <>
-      <nav aria-label="Documents">{snapshot?.catalog.documents.map((entry) => <button key={entry.id} aria-current={entry.id === doc.document.id ? 'page' : undefined} onClick={() => choose(entry.id)}>{entry.title}</button>)}</nav>
+      <nav aria-label="Documents">{snapshot?.catalog.documents.map((entry) => <button key={entry.id} aria-current={entry.id === doc.document.id ? 'page' : undefined} onClick={() => choose(entry.id)}>{entry.title}<RuleStatusIcon model={entry.model !== undefined} modelCheck={entry.modelCheck} stale={entry.modelCheckStale} /></button>)}</nav>
       <article key={`${doc.document.id}:${snapshot?.revision}`}>
-        <h1>{doc.document.title}</h1><p>{doc.document.summary}</p><p className="mcp-provenance">{doc.document.status}{doc.document.sourceRevision ? ` · Reviewed at ${doc.document.sourceRevision.slice(0, 12)}` : ' · Source revision not recorded'} <RuleBadge revision={doc.document.modelCheck?.sourceRevision} stale={doc.document.modelCheckStale} /></p>
-        {doc.document.model ? <RuleCheckControls onInstall={async (report, signal) => {
-          const view = await callCheck({ action: 'install' }, signal);
-          report(view?.message ?? 'The rule checker is not installed.');
-          return view?.message ?? null;
-        }} onCheck={async (report, signal) => {
-          const view = await callCheck({ page: doc.document.file }, signal);
-          if (view) report(view.message);
-          return view;
-        }} /> : null}
+        <h1>{doc.document.title}</h1><p>{doc.document.summary}</p><div className="mcp-provenance">{doc.document.status}{doc.document.sourceRevision ? ` · Reviewed at ${doc.document.sourceRevision.slice(0, 12)}` : ' · Source revision not recorded'} <RuleBadge revision={doc.document.modelCheck?.sourceRevision} stale={doc.document.modelCheckStale} />{rules.toggle}</div>
+        {rules.panel}
         <RulePath rules={ruleMarks.get(ruleNode ?? '') ?? []} />
         <div role="group" aria-label="Document view"><button aria-pressed={view === 'diagrams'} onClick={() => setView('diagrams')}>Diagrams</button><button aria-pressed={view === 'details'} onClick={() => setView('details')}>Details</button></div>
         <div className="mcp-content" data-detail-open={detailSection !== null && sections[detailSection] ? '' : undefined}>
