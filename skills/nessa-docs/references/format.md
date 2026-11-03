@@ -96,7 +96,10 @@ against the newer source.
 ## Optional rule model
 
 A page may link a TLA+ model of its chart. The model is optional. A page
-without one is unchanged, and validation does not require a checker.
+without one is unchanged, and validation does not require a checker. When models
+are authored, refreshed, or reported as verified, follow the required
+[adversarial review and negative-control procedure](model-review.md). Catalog
+validation and a saved `modelCheck` result alone do not satisfy that procedure.
 
 Keep the model as files under `docs/state/tla/`, mirroring the page path. For
 `docs/state/services/sdk/attachment.md`:
