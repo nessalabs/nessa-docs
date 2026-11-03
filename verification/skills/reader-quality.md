@@ -102,6 +102,23 @@ to the model-review reference: find accidental extra enforcers, and inspect whet
 a counterexample reaches the intended failure window. This is a model-fidelity
 improvement, not a claim that prose tests establish implementation correctness.
 
+## Final review of the distributed instructions
+
+A separate maintainer reviewed the canonical and packaged skill after the transfer
+runs. The packaged copy retained two older instructions that conflicted with the
+new procedure. It required models for any risky flow while also calling models
+optional, and told authors to stamp the source checkpoint after checking. The
+checker copies the page checkpoint into its receipt, so that order can immediately
+make a fresh receipt stale.
+
+The [packaged skill update](https://github.com/nessalabs/skills/pull/34) now records
+the reviewed checkpoint before final checks, requires matching receipts, and makes
+model selection consistently optional while keeping all verification gates
+mandatory once a model is selected. It also identifies supported execution routes
+without assuming an unavailable MCP tool. The reviewer rechecked both fixes and
+closed the findings. This review tests whether the instructions themselves can be
+followed consistently, separately from reviewing the documentation they produce.
+
 ## Result and remaining scope
 
 The revised skill now requires task-first explanations, locally defined terms,
