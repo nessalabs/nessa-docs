@@ -30,6 +30,9 @@ Challenge at least these questions where applicable:
   never occur, failure states are excluded, or guards assume the desired result?
 - Do finite bounds, fairness assumptions or environment restrictions hide the
   behavior being claimed? Is deadlock handling justified, including termination?
+- Does a second guard or atomic step accidentally enforce a rule after its real
+  owner has released it? Separate caller completion from underlying work when
+  they can finish at different times.
 - Does the abstraction match current code, rather than silently modeling a fix
   or an ideal design? Are implementation uncertainties visible in the docs?
 
@@ -54,7 +57,10 @@ claim complete verification while material review findings remain unresolved.
    false invariant, type error or unrelated failure is not a successful control.
 4. Check mutants only in isolated temporary files or in-memory copies. Require
    the expected semantic rule to break and inspect its counterexample for the
-   intended bad behavior. Require no unchecked rules or resource-limit failures.
+   intended bad behavior. The trace must reach the relevant failure window; a
+   failure before that window does not test it. Avoid weakening several independent
+   protections together when the intended defect removes only one. Require no
+   unchecked rules or resource-limit failures.
    A mutant that still passes is a finding: investigate reachability, bounds,
    mutation effectiveness and property strength before claiming completion.
 5. After fixes, rerun affected baselines and controls against the final inputs.

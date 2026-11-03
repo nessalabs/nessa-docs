@@ -92,21 +92,36 @@ application state. Avoid a box for every function or field. Use
 
 ## Write for the first reader
 
-Open each page and clickable explanation with plain English. Say what happens,
-what allows or prevents the next step, and what the reader can expect afterward.
-A state or arrow may be the first thing the person reads. Explain its condition
-without requiring the rest of the page. Add a small example or sequence when it
-helps. Keep important failure and uncertainty visible in the short explanation.
+Write in simple technical English: familiar verbs, explicit actors and one
+consistent name for each thing. Explain a necessary technical term at first use;
+do not replace a precise condition with a vague promise. Lead with the person's
+task, the result they can observe, and which part owns it. Put implementation
+mechanics and model details after that explanation.
 
-Use short sentences and ordinary verbs. No em dashes, slogans, filler or invented
-jargon. Keep function names, exact error types and test-name lists out of the
-opening explanation. Add a few useful source links for readers who want the
-implementation; the complete source list belongs in frontmatter. Do not replace
-a wall of prose with a wall of boxes.
+For a lifecycle or operation, follow one concrete example from entry to outcome.
+Explain what can fail, what may already have changed when an error returns, who
+still owns unfinished work, and what the caller can safely do next. If recovery
+is not implemented or has not been reviewed, say so; do not invent a retry recipe.
+Trace the actual entry point and composition before presenting a helper or a
+standalone API as a feature available in the app.
 
-Use `diagramLinks` for drill-down into another page and `diagramDetails` for an
-explanation in the owning Markdown. The browser marks available depth with a +.
-Full detail shows authored content; it does not launch agents or write files.
+Use short connected paragraphs. No em dashes, slogans, filler or invented jargon.
+Use a table to compare outcomes, and steps only for a real procedure. Keep code
+symbols and test inventories out of the opening; add exact names and source links
+where readers need them to act. A diagram must carry its important failure and
+retry conditions, or clearly name the portion of the behavior it leaves out.
+Do not replace a wall of prose with a wall of boxes.
+
+Use `diagramLinks` for drill-down and `diagramDetails` for explanations in the
+owning Markdown. Each clickable explanation should make sense on its own: what
+happened, what allows the next step, and what remains uncertain. Full detail
+shows authored content; it does not launch agents or write files.
+
+For a new atlas or substantial refresh, follow
+[the reader-quality review](references/reader-quality.md) before completion.
+Test whether someone can use the docs, then check the simplified account against
+source. For a narrow edit, apply the same checks to the affected explanation.
+Page counts, model passes and rendering checks do not establish readability.
 
 ## Require adversarial model verification
 
