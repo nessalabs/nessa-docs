@@ -108,6 +108,22 @@ Use `diagramLinks` for drill-down into another page and `diagramDetails` for an
 explanation in the owning Markdown. The browser marks available depth with a +.
 Full detail shows authored content; it does not launch agents or write files.
 
+## Require adversarial model verification
+
+TLA+ models remain optional. Every run that creates or changes a model, refreshes
+its source mapping, or reports model verification must follow
+[the model review procedure](references/model-review.md). For every model in
+that scope, require source-grounded adversarial review, a passing unmodified
+baseline, and reproducible negative controls that break the expected semantic
+rules. A full-atlas verification includes every linked model; a narrow update
+includes affected models and shared owners, with exclusions stated explicitly.
+Do not reuse old receipts as evidence that these checks ran this time.
+
+Resolve review findings and rerun affected checks after fixes. Missing review,
+missing controls, unexpected mutant passes, or unfinished checks mean verification
+is incomplete. Report the gap rather than claim completion. A passing TLC result
+alone does not satisfy this requirement or prove the implementation correct.
+
 ## Check and open
 
 Check stable IDs, parents, relative links, headings, Mermaid syntax and diagram
