@@ -83,7 +83,8 @@ prove phone UI, deployed gateway or physical-device correctness.
 
 ## Further transfer: Nessa UI
 
-The fresh UI atlas distinguishes host-owned delivery and authorization from
+The fresh [UI atlas](https://github.com/nessalabs/nessa_ui/pull/155) maps 31 pages
+and distinguishes host-owned delivery and authorization from
 component behavior. Six docs-only tasks covered queue closure, rendering timeout,
 file changes, shared overlays, approval exit and transcript replay. Source review
 supported those answers. Model review found an extra admission guard: after a
@@ -94,7 +95,9 @@ so that control did not isolate the intended failure window.
 
 The author separated queue-link ownership from the underlying Promise and changed
 the control to remove only quarantine admission. Final control evidence and review
-closure are recorded in the UI atlas. This observation added two general checks
+closure are recorded in the UI atlas. Five models and nine controls passed;
+the repository full gate and a 31-page browser check also passed. These are
+separate forms of evidence. This observation added two general checks
 to the model-review reference: find accidental extra enforcers, and inspect whether
 a counterexample reaches the intended failure window. This is a model-fidelity
 improvement, not a claim that prose tests establish implementation correctness.
