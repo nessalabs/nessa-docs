@@ -81,6 +81,24 @@ architecture/design checks on macOS. Chrome opened all pages and rendered all
 accessible from the normal diagram view. Neither renderer checks nor the models
 prove phone UI, deployed gateway or physical-device correctness.
 
+## Further transfer: Nessa UI
+
+The fresh UI atlas distinguishes host-owned delivery and authorization from
+component behavior. Six docs-only tasks covered queue closure, rendering timeout,
+file changes, shared overlays, approval exit and transcript replay. Source review
+supported those answers. Model review found an extra admission guard: after a
+rendering timeout, the model still blocked new work merely because the underlying
+render remained active. The implementation instead releases the queue wait and
+relies on quarantine. Removing both model guards could fail before the timeout,
+so that control did not isolate the intended failure window.
+
+The author separated queue-link ownership from the underlying Promise and changed
+the control to remove only quarantine admission. Final control evidence and review
+closure are recorded in the UI atlas. This observation added two general checks
+to the model-review reference: find accidental extra enforcers, and inspect whether
+a counterexample reaches the intended failure window. This is a model-fidelity
+improvement, not a claim that prose tests establish implementation correctness.
+
 ## Result and remaining scope
 
 The revised skill now requires task-first explanations, locally defined terms,
