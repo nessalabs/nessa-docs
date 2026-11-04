@@ -12,7 +12,7 @@ import type { ModelCheckRunView } from '../../shared/model-check';
 import '../styles.css';
 import './styles.css';
 
-const app = new App({ name: 'Nessa Docs', version: '0.1.0' }, { availableDisplayModes: ['inline'] }, { autoResize: true });
+const app = new App({ name: 'Nessa Docs', version: '0.1.0' }, { availableDisplayModes: ['inline', 'fullscreen'] }, { autoResize: true });
 let current: BundleSnapshot | null = null;
 let publish: (snapshot: BundleSnapshot) => void = () => undefined;
 let report: (message: string) => void = () => undefined;
@@ -179,5 +179,11 @@ function Explorer() {
 }
 createRoot(document.getElementById('root')!).render(<Explorer />);
 app.connect(undefined, { timeout: 10000 }).then(() => {
-  setAppearance(app.getHostContext()?.theme ?? 'light');
+  const context = app.getHostContext();
+  setAppearance(context?.theme ?? 'light');
+  // Ask the host for its expanded reader surface; hosts choose its placement.
+  // Inline-only hosts and hosts that decline expansion remain usable.
+  if (context?.displayMode !== 'fullscreen' && context?.availableDisplayModes?.includes('fullscreen')) {
+    void app.requestDisplayMode({ mode: 'fullscreen' }).catch(() => undefined);
+  }
 }, () => report('The MCP Apps host connection failed. Reopen this explorer from show_docs.'));
