@@ -1,5 +1,6 @@
 // Disk adapter for one explicitly selected private store. Raw Markdown remains
 // authoritative; a single manifest commits current + previous generations.
+import { MAX_BUNDLE_FILES } from '../../shared/mcp-limits.js';
 import * as fs from 'node:fs/promises';
 import { constants, type Stats } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
@@ -12,14 +13,15 @@ export const storeIo: Io = fs;
 const markerSchema = z.object({ format: z.literal('nessa-docs'), version: z.literal(1), scope: z.uuid() }).strict();
 const descriptorSchema = z.object({
   generation: z.uuid().regex(/^[a-f0-9-]+$/), scope: z.uuid(), revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
-  files: z.array(z.object({ path: z.union([bundlePath, modelPath]), bytes: z.number().int().min(0).max(256 * 1024), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict()).min(1).max(16),
+  files: z.array(z.object({ path: z.union([bundlePath, modelPath]), bytes: z.number().int().min(0).max(256 * 1024), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict()).min(1).max(MAX_BUNDLE_FILES),
 }).strict();
 const manifestSchema = z.object({ version: z.literal(1), current: descriptorSchema, previous: descriptorSchema.nullable() }).strict();
 type Descriptor = z.infer<typeof descriptorSchema>;
 type Manifest = z.infer<typeof manifestSchema>;
 const MARKER = '.nessa-docs-store.json';
 const LOCK = '.writer.lock';
-const MAX_METADATA = 16 * 1024;
+// A manifest holds current and previous descriptors, including 200-character paths.
+const MAX_METADATA = 64 * 1024;
 const MAX_ORPHANS = 4;
 class OwnershipError extends Error {}
 const same = (a: Stats, b: Stats) => a.dev === b.dev && a.ino === b.ino;

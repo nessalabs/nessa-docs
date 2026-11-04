@@ -1,3 +1,4 @@
+import { MAX_BUNDLE_FILES } from './mcp-limits.js';
 // Validate the bridge payload before allowing it into the shared renderer.
 import { z } from 'zod';
 import { DOCUMENT_KINDS, DOCUMENT_STATUSES } from './api.js';
@@ -33,7 +34,7 @@ const detail = z.object({ diagram: z.number().int().nonnegative(), family: z.enu
 ]) });
 const response = z.object({ version: z.string(), document: summary, body: z.string().max(65536), links: z.record(z.string(), target), sources: z.array(z.object({ raw: z.string(), target })), diagramLinks: z.record(z.string(), crumb), diagramDetails: z.array(detail), breadcrumbs: z.array(crumb), children: z.array(summary), issues: z.array(issue) });
 const bundleFile = z.union([z.object({ path: z.string(), markdown: z.string().max(65536) }).strict(), z.object({ path: z.string(), text: z.string().max(65536) }).strict()]);
-export const snapshotSchema = z.object({ storage: z.discriminatedUnion('kind', [z.object({kind:z.literal('memory')}), z.object({kind:z.literal('durable'),status:z.enum(['synced','unconfirmed']),projectPath:z.string()})]), files: z.array(bundleFile).min(1).max(16), scope: z.uuid(), revision: z.number().int().positive(), catalog: z.object({ version: z.string(), rootId: id, documents: z.array(summary).min(1).max(16), issues: z.array(issue) }), documents: z.array(response).min(1).max(16) });
+export const snapshotSchema = z.object({ storage: z.discriminatedUnion('kind', [z.object({kind:z.literal('memory')}), z.object({kind:z.literal('durable'),status:z.enum(['synced','unconfirmed']),projectPath:z.string()})]), files: z.array(bundleFile).min(1).max(MAX_BUNDLE_FILES), scope: z.uuid(), revision: z.number().int().positive(), catalog: z.object({ version: z.string(), rootId: id, documents: z.array(summary).min(1).max(MAX_BUNDLE_FILES), issues: z.array(issue) }), documents: z.array(response).min(1).max(MAX_BUNDLE_FILES) });
 
 // Zod intentionally omits __proto__ in parsed records. Authored map keys are
 // data here, so validate each value and rebuild with own data properties.

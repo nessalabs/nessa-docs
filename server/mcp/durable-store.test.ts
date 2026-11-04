@@ -290,3 +290,30 @@ it('round-trips Unicode exactly and refuses lossy surrogate input', async () => 
   expect(owner.bundle.read().revision).toBe(1); await owner.store.close();
   expect((await open(path)).bundle.read().files).toEqual(content);
 });
+
+
+it('reopens a modeled atlas larger than the former file limit', async () => {
+  const { modeledAtlas } = await import('../testing/modeled-atlas');
+  const path = await location();
+  const first = await open(path);
+  const saved = await first.bundle.replace({ expectedRevision: 0, files: modeledAtlas() });
+  await first.store.close();
+  const reopened = await open(path);
+  expect(reopened.bundle.read().files).toEqual(saved.files);
+  expect(reopened.bundle.read().documents).toHaveLength(14);
+});
+
+it('reopens two full generations with maximum-length paths', async () => {
+  const path = await location();
+  const owner = await open(path);
+  const many = [files()[0]!, ...Array.from({ length: 63 }, (_, i) => ({
+    path: `docs/state/${'x'.repeat(183)}${String(i).padStart(3, '0')}.md`,
+    markdown: doc(`child${i}`, 'system'),
+  }))];
+  expect(many[1]!.path).toHaveLength(200);
+  await owner.bundle.replace({ expectedRevision: 0, files: many });
+  await owner.bundle.replace({ expectedRevision: 1, files: many });
+  expect((await fs.stat(join(path, 'current.json'))).size).toBeGreaterThan(16 * 1024);
+  await owner.store.close();
+  expect((await open(path)).bundle.read().files).toEqual(many);
+});
