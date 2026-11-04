@@ -77,4 +77,7 @@ The explorer now advertises both modes and requests fullscreen when the host
 supports it. Inline-only hosts and rejected requests keep the inline reader.
 The host decides where fullscreen appears; this change alone does not prove
 right-sidebar placement. The browser harness checks both negotiation paths;
-the actual desktop placement still requires the completion check above.
+a fresh desktop connection subsequently confirmed the display-mode change to
+fullscreen. Codex screen context reported a visible right sidebar with a
+focused `mcp_app` tab. This verifies MCP sidebar placement, not the remaining
+diagram interaction checks above.
