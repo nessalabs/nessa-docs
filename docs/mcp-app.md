@@ -120,7 +120,7 @@ The Apps bridge negotiates independently when a host opens the resource.
 
 Only one replacement is validated at a time; overlapping attempts are refused
 before entering the parser queue. One stdio process owns one bundle, limited to
-16 files, 64 Ki characters per file and 256 KiB of total UTF-8 Markdown. Memory
+64 files (pages and linked models together), 64 Ki characters per file and 256 KiB of total UTF-8 Markdown. Memory
 mode loses documents on restart. Opt-in durable mode writes only to the private,
 operator-selected store, commits before reporting durable success, and restores
 its scope/revision through validation. A lost/unconfirmed acknowledgement must

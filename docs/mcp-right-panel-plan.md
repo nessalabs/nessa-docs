@@ -67,3 +67,17 @@ the same for either delivery path.
 
 The localhost browser is useful for standalone docs, but is not evidence for
 the MCP right-panel goal.
+
+## Local desktop display-mode finding
+
+Desktop logs for the Keel test confirm that the MCP widget connected and its
+frame committed inside the chat. The host advertised inline and fullscreen
+modes, while the explorer advertised inline only and never requested expansion.
+The explorer now advertises both modes and requests fullscreen when the host
+supports it. Inline-only hosts and rejected requests keep the inline reader.
+The host decides where fullscreen appears; this change alone does not prove
+right-sidebar placement. The browser harness checks both negotiation paths;
+a fresh desktop connection subsequently confirmed the display-mode change to
+fullscreen. Codex screen context reported a visible right sidebar with a
+focused `mcp_app` tab. This verifies MCP sidebar placement, not the remaining
+diagram interaction checks above.

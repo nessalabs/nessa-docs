@@ -52,7 +52,7 @@ describe('transient document bundles', () => {
       { path: 'docs/state/A/one.md', markdown: doc('upper', 'system') },
       { path: 'docs/state/a/two.md', markdown: doc('lower', 'system') },
     ] })).rejects.toThrow('Duplicate');
-    await expect(bundle.replace({ expectedRevision: 0, files: Array.from({ length: 17 }, (_, i) => ({ path: `docs/state/${i}.md`, markdown: '' })) })).rejects.toThrow();
+    await expect(bundle.replace({ expectedRevision: 0, files: [file(), ...Array.from({ length: 64 }, (_, i) => ({ path: `docs/state/child${i}.md`, markdown: doc(`child${i}`, 'system') }))] })).rejects.toThrow('64');
     await expect(bundle.replace({ expectedRevision: 0, files: Array.from({ length: 5 }, (_, i) => ({ path: `docs/state/${i}.md`, markdown: 'x'.repeat(60000) })) })).rejects.toThrow('256 KiB');
     await expect(bundle.replace({ expectedRevision: 0, files: [file('x'.repeat(65537))] })).rejects.toThrow();
   });
@@ -66,4 +66,13 @@ it('does not publish a replacement cancelled during validation and releases admi
   await expect(pending).rejects.toThrow();
   expect(() => bundle.read()).toThrow('No documents yet');
   expect((await bundle.replace({ expectedRevision: 0, files: [file()] })).revision).toBe(1);
+});
+
+
+it('loads a 14-page atlas with six linked model pairs into the embedded reader', async () => {
+  const { modeledAtlas } = await import('../testing/modeled-atlas');
+  const { readSnapshot } = await import('../../shared/mcp-payload');
+  const snapshot = await new DocumentBundle().replace({ expectedRevision: 0, files: modeledAtlas() });
+  expect(snapshot.files).toHaveLength(26);
+  expect(readSnapshot(snapshot).documents).toHaveLength(14);
 });
