@@ -140,6 +140,49 @@ function renderSvg(source: string, appearance: Appearance): Promise<{ svg: strin
   return job;
 }
 
+const renderedDiagrams = new Map<string, { svg: string; renderId: string }>();
+const renderingDiagrams = new Map<string, Promise<{ svg: string; renderId: string }>>();
+
+function diagramCacheKey(source: string, appearance: Appearance): string {
+  return `${appearance}\0${source}`;
+}
+
+export function diagramReady(source: string, appearance: Appearance): boolean {
+  return !diagramFits(source) || renderedDiagrams.has(diagramCacheKey(source, appearance));
+}
+
+function renderAndRemember(source: string, appearance: Appearance): Promise<{ svg: string; renderId: string }> {
+  const key = diagramCacheKey(source, appearance);
+  const cached = renderedDiagrams.get(key);
+  if (cached) return Promise.resolve(cached);
+  const pending = renderingDiagrams.get(key);
+  if (pending) return pending;
+  const job = renderSvg(source, appearance).then(
+    (rendered) => {
+      renderedDiagrams.set(key, rendered);
+      renderingDiagrams.delete(key);
+      return rendered;
+    },
+    (error: unknown) => {
+      renderingDiagrams.delete(key);
+      throw error;
+    },
+  );
+  renderingDiagrams.set(key, job);
+  return job;
+}
+
+export function warmDiagram(source: string, appearance: Appearance): Promise<void> {
+  if (!diagramFits(source)) return Promise.resolve();
+  return renderAndRemember(source, appearance).then(() => undefined, () => undefined);
+}
+
+function initialDiagramState(source: string, appearance: Appearance): DiagramState {
+  if (!diagramFits(source)) return { kind: 'too-large', length: source.length };
+  const cached = renderedDiagrams.get(diagramCacheKey(source, appearance));
+  return cached ? { kind: 'rendered', svg: cached.svg, renderId: cached.renderId } : { kind: 'rendering' };
+}
+
 /** Finds the SVG element(s) Mermaid drew for a node ID in flowchart, state and sequence diagrams. */
 export function nodeElements(svg: SVGSVGElement, renderId: string): Map<string, Element[]> {
   const found = new Map<string, Element[]>();
@@ -378,7 +421,7 @@ export function Diagram({
   const selectRule = useRef(onSelectRule);
   selectRule.current = onSelectRule;
   const appearance = useAppearance();
-  const [state, setState] = useState<DiagramState>({ kind: 'rendering' });
+  const [state, setState] = useState<DiagramState>(() => initialDiagramState(source, appearance));
   const [zoom, setZoom] = useState<Zoom>({ mode: 'readable' });
   const [fitScale, setFitScale] = useState(1);
   const [expanded, setExpanded] = useState(false);
@@ -400,8 +443,13 @@ export function Diagram({
       setState({ kind: 'too-large', length: source.length });
       return;
     }
+    const cached = renderedDiagrams.get(diagramCacheKey(source, appearance));
+    if (cached) {
+      setState((prev) => (prev.kind === 'rendered' && prev.renderId === cached.renderId ? prev : { kind: 'rendered', svg: cached.svg, renderId: cached.renderId }));
+      return;
+    }
     setState({ kind: 'rendering' });
-    renderSvg(source, appearance).then(
+    renderAndRemember(source, appearance).then(
       ({ svg, renderId }) => current && setState({ kind: 'rendered', svg, renderId }),
       async (error: unknown) => {
         if (!current) return; // unmounted: nothing to show
