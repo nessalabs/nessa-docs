@@ -12,9 +12,9 @@ import type { CatalogIssue, DocumentResponse, DocumentSummary, LinkTarget, Unkno
 import { useProjectReads } from './project-opening/project-context';
 import { groupByKind, KIND_NAME, KIND_SINGULAR } from './kinds';
 import { lexMarkdown, markdownSections } from '../shared/markdown';
-import { useAppearance } from './appearance';
+import { useAppearance, type Appearance } from './appearance';
 import { DetailInspector } from './detail-inspector';
-import { Diagram, type DiagramDetailEntry } from './diagram';
+import { Diagram, diagramReady, warmDiagram, type DiagramDetailEntry } from './diagram';
 import { useDiagramDetail } from './diagram-detail';
 import { collectDiagrams, collectHeadings, type Heading, MarkdownBody, TargetLink } from './markdown';
 import { AppLink, documentPath, navigate, scrollToHash, useSearchAndHash } from './router';
@@ -32,43 +32,107 @@ type PageState =
   | { readonly kind: 'unknown'; readonly id: string; readonly response: UnknownDocumentResponse }
   | { readonly kind: 'failed'; readonly id: string; readonly message: string };
 
+const responseCache = new Map<string, DocumentResponse>();
+
+function responseKey(version: string, id: string): string {
+  return `${version}\0${id}`;
+}
+
+function recallResponse(version: string, id: string): DocumentResponse | null {
+  return responseCache.get(responseKey(version, id)) ?? null;
+}
+
+function rememberResponse(response: DocumentResponse): void {
+  const prefix = `${response.version}\0`;
+  for (const key of [...responseCache.keys()]) {
+    if (!key.startsWith(prefix)) responseCache.delete(key);
+  }
+  responseCache.set(responseKey(response.version, response.document.id), response);
+}
+
+function documentTokens(body: string, title: string): Token[] {
+  const all = lexMarkdown(body);
+  const first = all.findIndex((token) => token.type !== 'space');
+  const lead = all[first];
+  if (lead?.type === 'heading' && lead.depth === 1 && plainText(lead.tokens).trim().toLowerCase() === title.trim().toLowerCase()) {
+    return all.filter((_, index) => index !== first);
+  }
+  return all;
+}
+
+function diagramSources(body: string, title: string): readonly string[] {
+  const tokens = documentTokens(body, title);
+  return collectDiagrams(tokens, collectHeadings(tokens).slugs).map((diagram) => diagram.source);
+}
+
+function pageReady(response: DocumentResponse, appearance: Appearance): boolean {
+  return diagramSources(response.body, response.document.title).every((source) => diagramReady(source, appearance));
+}
+
 export function DocumentPage(props: { id: string; catalogVersion: string; onStaleCatalog: () => void; focusOnLoad: boolean }) {
   const api = useProjectReads();
+  const appearance = useAppearance();
   const { id, catalogVersion, onStaleCatalog, focusOnLoad } = props;
   const [state, setState] = useState<PageState>({ kind: 'loading', id });
   const [attempt, setAttempt] = useState(0);
+  const appearanceNow = useRef(appearance);
+  appearanceNow.current = appearance;
+  const ready = recallResponse(catalogVersion, id);
+  if (ready && (state.kind !== 'loaded' || state.id !== id || state.response !== ready) && pageReady(ready, appearance)) {
+    setState({ kind: 'loaded', id, response: ready });
+  }
 
   useEffect(() => {
     const controller = new AbortController();
-    setState({ kind: 'loading', id });
+    const cached = recallResponse(catalogVersion, id);
+    const deliver = async (response: DocumentResponse) => {
+      rememberResponse(response);
+      const theme = appearanceNow.current;
+      for (const source of diagramSources(response.body, response.document.title)) {
+        if (controller.signal.aborted) return;
+        await warmDiagram(source, theme);
+      }
+      if (controller.signal.aborted) return;
+      setState({ kind: 'loaded', id, response });
+    };
+    if (cached && pageReady(cached, appearanceNow.current)) {
+      setState({ kind: 'loaded', id, response: cached });
+      return () => controller.abort();
+    }
+    if (cached) {
+      void deliver(cached);
+      return () => controller.abort();
+    }
     api.document(id, controller.signal).then(
       (outcome) => {
         if (controller.signal.aborted) return;
-        if (outcome.kind === 'ok') setState({ kind: 'loaded', id, response: outcome.value });
-        else if (outcome.kind === 'unknown-document') setState({ kind: 'unknown', id, response: outcome.value });
+        if (outcome.kind === 'ok') return deliver(outcome.value);
+        if (outcome.kind === 'unknown-document') setState({ kind: 'unknown', id, response: outcome.value });
         else setState({ kind: 'failed', id, message: outcome.message });
       },
       () => undefined,
     );
     return () => controller.abort();
-  }, [id, attempt]);
+  }, [id, attempt, catalogVersion, api]);
 
-  const loadedVersion = state.kind === 'loaded' ? state.response.version : null;
+  const loadedVersion = state.kind === 'loaded' && state.id === id ? state.response.version : null;
   useEffect(() => {
     if (loadedVersion !== null && loadedVersion !== catalogVersion) onStaleCatalog();
   }, [loadedVersion, catalogVersion, onStaleCatalog]);
 
-  if (state.id !== id || state.kind === 'loading') {
+  if (state.kind === 'loaded') {
+    const pending = state.id !== id;
     return (
-      <>
-        <Titlebar current={id} />
-        <div className="page-status" aria-busy="true" data-page-state="loading">
-          Loading…
-        </div>
-      </>
+      <DocumentView
+        key={`${state.id}:${state.response.version}`}
+        response={state.response}
+        focusOnLoad={focusOnLoad && !pending}
+        pending={pending}
+        onChecked={() => setAttempt((n) => n + 1)}
+      />
     );
   }
-  if (state.kind === 'failed') {
+  if (state.kind === 'failed' && state.id === id) {
     return (
       <>
         <Titlebar current={id} />
@@ -79,8 +143,15 @@ export function DocumentPage(props: { id: string; catalogVersion: string; onStal
       </>
     );
   }
-  if (state.kind === 'unknown') return <UnknownDocument response={state.response} />;
-  return <DocumentView key={`${state.id}:${state.response.version}`} response={state.response} focusOnLoad={focusOnLoad} onChecked={() => setAttempt((n) => n + 1)} />;
+  if (state.kind === 'unknown' && state.id === id) return <UnknownDocument response={state.response} />;
+  return (
+    <>
+      <Titlebar current={id} />
+      <div className="page-status" aria-busy="true" data-page-state="loading">
+        Loading…
+      </div>
+    </>
+  );
 }
 
 type View = 'diagrams' | 'details';
@@ -125,7 +196,13 @@ export function chooseView(search: string, hash: string, hasDiagrams: boolean): 
 
 const NO_DETAILS: readonly DiagramDetailEntry[] = [];
 
-function DocumentView({ response, focusOnLoad, onChecked }: { response: DocumentResponse; focusOnLoad: boolean; onChecked: () => void }) {
+function locationParts(searchAndHash: string): { search: string; hash: string } {
+  const hashAt = searchAndHash.indexOf('#');
+  if (hashAt === -1) return { search: searchAndHash, hash: '' };
+  return { search: searchAndHash.slice(0, hashAt), hash: searchAndHash.slice(hashAt) };
+}
+
+function DocumentView({ response, focusOnLoad, onChecked, pending }: { response: DocumentResponse; focusOnLoad: boolean; onChecked: () => void; pending: boolean }) {
   const { document, breadcrumbs, children, sources, issues } = response;
   // Closed on every document: DocumentView is keyed by document, so this starts false each time.
   const [provenanceOpen, setProvenanceOpen] = useState(false);
@@ -140,29 +217,28 @@ function DocumentView({ response, focusOnLoad, onChecked }: { response: Document
   };
   const title = useRef<HTMLHeadingElement>(null);
   const [titleOnScreen, setTitleOnScreen] = useState(true);
-  const location = useSearchAndHash();
+  const liveLocation = useSearchAndHash();
+  const heldLocation = useRef(liveLocation);
+  if (!pending) heldLocation.current = liveLocation;
+  const location = pending ? heldLocation.current : liveLocation;
+  const { search, hash } = locationParts(location);
 
   const { all, sections, tokens, headings, slugs, diagrams } = useMemo(() => {
     const all = lexMarkdown(response.body);
-    // A leading "# Title" repeats the title shown above.
-    const first = all.findIndex((token) => token.type !== 'space');
-    const lead = all[first];
-    const body =
-      lead?.type === 'heading' && lead.depth === 1 && plainText(lead.tokens).trim().toLowerCase() === document.title.toLowerCase()
-        ? all.filter((_, index) => index !== first)
-        : all;
+    const body = documentTokens(response.body, document.title);
     const collected = collectHeadings(body);
     // Sections are indexed over the whole body, as the server indexed them (shared/markdown.ts).
     return { all, sections: markdownSections(all), tokens: body, ...collected, diagrams: collectDiagrams(body, collected.slugs) };
   }, [response.body, document.title]);
 
-  const view = chooseView(window.location.search, window.location.hash, diagrams.length > 0);
+  const view = chooseView(search, hash, diagrams.length > 0);
   const detailsHref = useCallback(
     (slug?: string) => `${documentPath(document.id)}?view=details${slug ? `#${encodeURIComponent(slug)}` : ''}`,
     [document.id],
   );
   const setView = (next: View) => {
-    if (next !== view) navigate(next === 'details' ? detailsHref() : `${documentPath(document.id)}?view=diagrams`);
+    if (pending || next === view) return;
+    navigate(next === 'details' ? detailsHref() : `${documentPath(document.id)}?view=diagrams`);
   };
 
   // The details inspector (design table in verification/CHECKLIST.md, "Diagram details").
@@ -282,11 +358,10 @@ function DocumentView({ response, focusOnLoad, onChecked }: { response: Document
   }, [document.title, focusOnLoad]);
 
   // On arrival and on every view change: the named section, or the top.
-  const hash = window.location.hash;
   // Diagrams above the section finish rendering after this runs and push it
   // down, so the section is re-applied while the layout settles — until the
   // reader scrolls or types, or a few seconds pass.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const main = window.document.getElementById('main');
     if (!scrollToHash(hash)) {
       main?.scrollTo(0, 0);
@@ -346,7 +421,7 @@ function DocumentView({ response, focusOnLoad, onChecked }: { response: Document
         actions={
           <>
             {viewSwitch ? <div className="wide-only view-switch-slot">{viewSwitch}</div> : null}
-            {outline.length > 1 ? <OutlineMenu headings={outline} hrefFor={detailsHref} /> : null}
+            {outline.length > 1 ? <OutlineMenu headings={outline} hrefFor={detailsHref} pending={pending} /> : null}
           </>
         }
       />
@@ -354,6 +429,8 @@ function DocumentView({ response, focusOnLoad, onChecked }: { response: Document
         className="page document-layout"
         data-doc-id={document.id}
         data-view={view}
+        aria-busy={pending ? true : undefined}
+        inert={pending ? true : undefined}
         data-diagram-detail={level}
         data-inspector={selection ? (narrow || expandedCharts > 0 ? 'dialog' : 'pane') : undefined}
       >
@@ -493,7 +570,7 @@ function DocumentView({ response, focusOnLoad, onChecked }: { response: Document
 }
 
 /** "On this page": the headings, one click away instead of a permanent column. */
-function OutlineMenu({ headings, hrefFor }: { headings: readonly Heading[]; hrefFor: (slug: string) => string }) {
+function OutlineMenu({ headings, hrefFor, pending }: { headings: readonly Heading[]; hrefFor: (slug: string) => string; pending: boolean }) {
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const button = useRef<HTMLButtonElement>(null);
@@ -502,6 +579,9 @@ function OutlineMenu({ headings, hrefFor }: { headings: readonly Heading[]; href
     setOpen(false);
     button.current?.focus();
   });
+  useEffect(() => {
+    if (pending) setOpen(false);
+  }, [pending]);
   useEffect(() => {
     if (!open) return;
     list.current?.querySelector<HTMLElement>('a')?.focus();
@@ -513,7 +593,7 @@ function OutlineMenu({ headings, hrefFor }: { headings: readonly Heading[]; href
   }, [open]);
   return (
     <div className="outline-menu">
-      <IconButton ref={button} label="On this page" aria-expanded={open} aria-controls={menuId} onClick={() => setOpen((v) => !v)} data-action="outline">
+      <IconButton ref={button} label="On this page" aria-expanded={open} aria-controls={menuId} disabled={pending} onClick={() => setOpen((v) => !v)} data-action="outline">
         <ListTree />
       </IconButton>
       {open ? (
