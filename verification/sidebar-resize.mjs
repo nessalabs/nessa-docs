@@ -67,14 +67,16 @@ const transparent = (opacity) => opacity === '0';
 async function light(page) {
   const r = await page.locator(S.resizer).boundingBox();
   const clip = { x: Math.round(r.x) + 3, y: Math.round(r.y), width: 6, height: Math.round(r.height) };
-  const on = await page.screenshot({ clip });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const on = await page.screenshot({ clip, animations: 'disabled' });
   await page.evaluate(() => {
     const style = document.createElement('style');
     style.id = '__no-light';
     style.textContent = '.sidebar-resizer::after { display: none !important; }';
     document.head.append(style);
   });
-  const off = await page.screenshot({ clip });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const off = await page.screenshot({ clip, animations: 'disabled' });
   await page.evaluate(() => document.getElementById('__no-light').remove());
   const rows = await page.evaluate(async ([a, b]) => {
     const pixels = async (base64) => {
