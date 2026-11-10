@@ -325,9 +325,11 @@ in a sentence becomes a pill; clicking it opens the referenced page, section or
 note in a peek beside the page, with a way to open the page in full.
 
 - `match` is a JavaScript regular expression. Named groups such as `(?<n>...)`
-  fill the templates. A pattern that can take very long (a repeated group that
-  itself repeats, such as `(a+)+`), uses back-references, is longer than 256
-  characters, or matches empty text is refused.
+  fill the templates. A pattern that can take very long is refused: a group
+  that repeats, such as `(...)+` or `(...){2,}`, may not hold a quantifier or a
+  `|` at any depth, so `(a+)+`, `(?:(a+))+` and `(a|b)*` are refused while
+  `(?:ADR|RFC)-\d+` is fine. So is one that uses back-references, is longer
+  than 256 characters, or matches empty text.
 - A match never splits a word: `XADR-1` and `ADR-12a` are not references.
   Matching looks inside one run of plain text only. Text in code, code blocks,
   link text, raw HTML and diagrams is never a pill, so write `` `ADR-1` `` to

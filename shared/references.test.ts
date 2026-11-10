@@ -38,6 +38,31 @@ describe('reference patterns', () => {
     expect(compileRule({ name: 'x', match: '(?:ADR|RFC)-\\d+' }).kind).toBe('ok');
   });
 
+  it('refuses repetition hidden behind more groups, choices or counted repeats', () => {
+    for (const match of ['(?:(a+))+$', '((?:a*))*b', '(?:(?:(\\w+)))+!', '(a|a)+$', '(?:(x|y))*z', '(a+){2,}', '(a?){3}', '[](a+)+', '(?<n>\\d+)+']) {
+      expect(compileRule({ name: 'x', match }).kind, match).toBe('invalid');
+    }
+    for (const match of ['ADR-(?<n>\\d+)', '(?:ADR|RFC)-(?<n>\\d{1,5})', '\\p{L}{2,}-\\d+', '[(+)]+x', '(?:ab){2}', '(?:a+)?b', '\\(a+\\)+']) {
+      expect(compileRule({ name: 'x', match }).kind, match).toBe('ok');
+    }
+  });
+
+  it('a refused near-miss pattern is never run, and accepted shapes stay fast', () => {
+    const rules = compileRules([{ name: 'slow', match: '(?:(a+))+$' }, { name: 'adr', match: 'ADR-(?<n>\\d+)' }]);
+    expect(rules.map((rule) => rule.name)).toEqual(['adr']);
+    const started = performance.now();
+    findReferences(`${'a'.repeat(40)}!`, rules);
+    expect(performance.now() - started).toBeLessThan(50);
+  });
+
+  it('steps over a whole emoji when skipping a zero-length or word-splitting match', () => {
+    const lookahead = compileRules([{ name: 'look', match: '(?=😀)' }]);
+    expect(lookahead).toHaveLength(1);
+    expect(findReferences('a 😀 b 😀', lookahead)).toEqual([]);
+    const emojiWord = compileRules([{ name: 'tag', match: '😀a' }]);
+    expect(findReferences('😀ab 😀a', emojiWord).map((match) => match.start)).toEqual([5]);
+  });
+
   it('fills templates, pads numbers and refuses a missing group', () => {
     const match = { text: 'ADR-7', groups: { n: '7' } };
     expect(fillTemplate('docs/adr/{n:04}-*.md', match)).toBe('docs/adr/0007-*.md');

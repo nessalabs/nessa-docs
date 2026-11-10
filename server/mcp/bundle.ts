@@ -13,6 +13,7 @@ import type { BundleSnapshot } from '../../shared/mcp.js';
 
 export const bundlePath = z.string().max(200).regex(/^docs\/state\/(?:[a-zA-Z0-9_-]+\/)*(?:README|[a-zA-Z0-9_-]+)\.md$/);
 export const modelPath = z.string().max(200).regex(/^docs\/state\/tla\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\.(?:tla|cfg)$/);
+export const configPath = z.literal(CONFIG_FILE);
 const authoredText = z.string().max(65536).refine((text) => Buffer.from(text, 'utf8').toString('utf8') === text, 'Text must contain well-formed Unicode that round-trips as UTF-8.');
 const markdownFile = z.object({
   path: bundlePath.describe('Bundle-relative Markdown path. Include docs/state/README.md as the system root.'),
@@ -23,7 +24,7 @@ const modelFile = z.object({
   text: authoredText.describe('The complete .tla or .cfg file.'),
 }).strict();
 const configFile = z.object({
-  path: z.literal(CONFIG_FILE).describe('The optional project config: card styles, reference pills and authoring rules. Call read_config for its format.'),
+  path: configPath.describe('The optional project config: card styles, reference pills and authoring rules. Call read_config for its format.'),
   text: authoredText.describe('The complete YAML file.'),
 }).strict();
 export const bundleFileSchema = z.union([markdownFile, modelFile, configFile]);
