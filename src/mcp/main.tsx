@@ -5,6 +5,8 @@ import type { BundleSnapshot } from '../../shared/mcp';
 import { lexMarkdown, markdownSections, markdownDiagrams } from '../../shared/markdown';
 import { collectHeadings, MarkdownBody } from '../markdown';
 import { Diagram } from '../diagram';
+import { cardFor, drawnSource } from '../../shared/cards';
+import type { ResolvedReference } from '../../shared/api';
 import { setAppearance } from '../appearance';
 import { snapshotFromResult } from '../../shared/mcp-payload';
 import { RuleBadge, RuleCheckControls, RulePath, RuleStatusIcon, ruleVerification, useRuleDisclosure } from '../rule-check';
@@ -103,13 +105,15 @@ function Explorer() {
   useEffect(() => {
     if (fragment !== null) document.getElementById(fragment)?.scrollIntoView();
   }, [doc?.document.id, fragment, view]);
+  const [peek, setPeek] = useState<ResolvedReference | null>(null);
+  const peekTokens = useMemo(() => (peek?.preview ? lexMarkdown(peek.preview.body) : []), [peek]);
   const closeDetail = () => {
     setDetailKey(null);
     if (detailTrigger.current instanceof HTMLElement || detailTrigger.current instanceof SVGElement) detailTrigger.current.focus();
   };
   const choose = (next: string) => {
     if (!snapshot?.documents.some((doc) => doc.document.id === next)) { setError('That document is outside this bundle.'); return; }
-    setDetailKey(null); setFragment(null); setId(next);
+    setDetailKey(null); setPeek(null); setFragment(null); setId(next);
   };
   async function refresh() {
     const requested = current;
@@ -163,13 +167,20 @@ function Explorer() {
         <div role="group" aria-label="Document view"><button aria-pressed={view === 'diagrams'} onClick={() => setView('diagrams')}>Diagrams</button><button aria-pressed={view === 'details'} onClick={() => setView('details')}>Details</button></div>
         <div className="mcp-content" data-detail-open={detailSection !== null && sections[detailSection] ? '' : undefined}>
           <div className="mcp-document-view">
-            <MarkdownBody tokens={tokens} slugs={slugs} links={doc.links} className={view === 'diagrams' && diagrams.length > 0 ? 'prose mcp-diagrams' : 'prose'} diagram={(index, source) => <Diagram key={`${index}:${source}`} index={index} source={source} links={doc.diagramLinks} onNavigateDocument={choose} details={detailsByDiagram[index]} selectedDetail={detailKey} onSelectDetail={(key, element) => { detailTrigger.current = element; setDetailKey(key); }} ruleMarks={ruleMarks} onSelectRule={setRuleNode} />} />
+            <MarkdownBody tokens={tokens} slugs={slugs} links={doc.links} references={{ rules: doc.referenceRules, resolved: doc.references, onPeek: (reference) => { setDetailKey(null); setPeek(reference); } }} className={view === 'diagrams' && diagrams.length > 0 ? 'prose mcp-diagrams' : 'prose'} diagram={(index, source, fence) => <Diagram key={`${index}:${source}`} index={index} source={drawnSource(cardFor(fence.card, source, doc.cards), source)} card={cardFor(fence.card, source, doc.cards)} cardTitle={fence.title} links={doc.diagramLinks} onNavigateDocument={choose} details={detailsByDiagram[index]} selectedDetail={detailKey} onSelectDetail={(key, element) => { detailTrigger.current = element; setDetailKey(key); }} ruleMarks={ruleMarks} onSelectRule={setRuleNode} />} />
           </div>
           {detailSection !== null && sections[detailSection] && <section ref={dialog} tabIndex={-1} role="dialog" aria-label="Diagram details" className="mcp-detail" onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); closeDetail(); } }}>
             <button onClick={closeDetail}>Close details</button>
             <h2>{sections[detailSection].title}</h2>
             {deeperPage && <button onClick={() => choose(deeperPage.id)}>Open {deeperPage.title}</button>}
             <MarkdownBody tokens={tokens.slice(sections[detailSection].start + 1, sections[detailSection].end)} slugs={slugs} links={doc.links} diagram={(_, source) => <pre>{source}</pre>} />
+          </section>}
+          {peek?.preview && <section tabIndex={-1} role="dialog" aria-label={`Reference ${peek.label}`} className="mcp-detail mcp-peek" onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); setPeek(null); } }}>
+            <button onClick={() => setPeek(null)}>Close reference</button>
+            <h2>{peek.preview.title}</h2>
+            <p className="mcp-provenance"><code>{peek.preview.file}</code></p>
+            {peek.target.kind === 'document' && <button onClick={() => { if (peek.target.kind === 'document') choose(peek.target.id); }}>Open page</button>}
+            <MarkdownBody tokens={peekTokens} slugs={slugs} links={peek.preview.links} diagram={(_, source) => <pre>{source}</pre>} />
           </section>}
         </div>
         {doc.issues.length > 0 && <details><summary>Document warnings ({doc.issues.length})</summary>{doc.issues.map((issue, i) => <p key={i}>{issue.message}</p>)}</details>}

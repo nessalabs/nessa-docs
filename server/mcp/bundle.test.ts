@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { DocumentBundle } from './bundle';
 import { doc } from '../testing/documents';
+import { readSnapshot as readPayload } from '../../shared/mcp-payload';
+import { configView } from './config-view';
 const file = (markdown = doc('system', null)) => ({ path: 'docs/state/README.md', markdown });
 
 describe('transient document bundles', () => {
@@ -75,4 +77,17 @@ it('loads a 14-page atlas with six linked model pairs into the embedded reader',
   const snapshot = await new DocumentBundle().replace({ expectedRevision: 0, files: modeledAtlas() });
   expect(snapshot.files).toHaveLength(26);
   expect(readSnapshot(snapshot).documents).toHaveLength(14);
+});
+
+it('carries the project config: pills to bundle pages, cards, and a refusal for a broken config', async () => {
+    const bundle = new DocumentBundle();
+    const config = { path: 'docs/state/nessa-docs.yaml', text: "references:\n  - name: page\n    match: '\\[\\[(?<id>[a-z-]+)\\]\\]'\n    open: { document: '{id}' }\ncards:\n  pairing: { look: handoff }\n" };
+    const snapshot = await bundle.replace({ expectedRevision: 0, files: [file(doc('system', null, {}, 'See [[child]].\n\n```mermaid card=pairing\nsequenceDiagram\n A->>B: x\n```\n')), { path: 'docs/state/child.md', markdown: doc('child', 'system') }, config] });
+    const system = snapshot.documents.find((entry) => entry.document.id === 'system');
+    expect(system?.references['page\u0000[[child]]']).toMatchObject({ target: { kind: 'document', id: 'child' } });
+    expect(system?.cards.pairing).toMatchObject({ look: 'handoff', family: 'sequence' });
+    expect(readPayload(JSON.parse(JSON.stringify(snapshot))).documents.length).toBe(2);
+    await expect(bundle.replace({ expectedRevision: 1, files: [file(), { ...config, text: 'references: 3\n' }] })).rejects.toThrow('nessa-docs.yaml');
+    expect(configView(config.text)).toMatchObject({ present: true, valid: true, references: [{ name: 'page' }] });
+    expect(configView(null)).toMatchObject({ present: false, valid: true, stateRoles: expect.arrayContaining(['waiting', 'refused']) });
 });

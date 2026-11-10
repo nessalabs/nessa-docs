@@ -1,6 +1,6 @@
 // Builds the API's JSON bodies from a loaded catalog.
 
-import { walkTokens } from 'marked';
+import { type Token, walkTokens } from 'marked';
 import type {
   CatalogResponse,
   Crumb,
@@ -14,6 +14,8 @@ import { lexMarkdown } from '../shared/markdown.js';
 import type { Catalog } from './catalog.js';
 import type { RepositoryFiles } from './files.js';
 import { resolveReference } from './links.js';
+import { referenceRules } from './project-config.js';
+import { resolvePageReferences } from './references.js';
 
 export const MAX_QUERY_LENGTH = 200;
 const MAX_RESULTS = 25;
@@ -29,8 +31,12 @@ export function catalogResponse(catalog: Catalog): CatalogResponse {
 
 /** Every href in the body, found with the same lexer and options the browser renders with. */
 export function markdownHrefs(body: string): string[] {
+  return hrefsOf(lexMarkdown(body));
+}
+
+function hrefsOf(tokens: Token[]): string[] {
   const hrefs = new Set<string>();
-  walkTokens(lexMarkdown(body), (token) => {
+  walkTokens(tokens, (token) => {
     if ((token.type === 'link' || token.type === 'image') && typeof token.href === 'string') hrefs.add(token.href);
   });
   return [...hrefs];
@@ -50,11 +56,14 @@ export async function documentResponse(
     };
   }
   const file = { kind: 'file', file: document.summary.file } as const;
+  const tokens = lexMarkdown(document.body);
   const linkEntries: [string, LinkTarget][] = [];
-  for (const href of markdownHrefs(document.body)) {
+  for (const href of hrefsOf(tokens)) {
     linkEntries.push([href, await resolveReference(href, file, catalog, files)]);
   }
   const links = Object.fromEntries(linkEntries);
+  const pills = await resolvePageReferences(catalog, document.summary.file, id, tokens, files, (href, from) =>
+    resolveReference(href, { kind: 'file', file: from }, catalog, files));
   const sources = [];
   for (const raw of document.sources) {
     sources.push({ raw, target: await resolveReference(raw, { kind: 'repository' }, catalog, files) });
@@ -80,7 +89,10 @@ export async function documentResponse(
       const summary = catalog.documents.get(child)?.summary;
       return summary ? [summary] : [];
     }),
-    issues: document.warnings,
+    issues: pills.issues.length > 0 ? [...document.warnings, ...pills.issues] : document.warnings,
+    referenceRules: referenceRules(catalog.config),
+    references: pills.references,
+    cards: catalog.config.cards,
   };
 }
 

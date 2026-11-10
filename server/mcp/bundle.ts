@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { posix } from 'node:path';
 import { z } from 'zod';
 import { loadCatalog } from '../catalog.js';
+import { CONFIG_FILE } from '../project-config.js';
 import { catalogResponse, documentResponse } from '../responses.js';
 import type { RepositoryFiles } from '../files.js';
 import type { DocumentResponse } from '../../shared/api.js';
@@ -21,7 +22,11 @@ const modelFile = z.object({
   path: modelPath.describe('TLA+ spec or TLC config under docs/state/tla/, mirroring the page path.'),
   text: authoredText.describe('The complete .tla or .cfg file.'),
 }).strict();
-export const bundleFileSchema = z.union([markdownFile, modelFile]);
+const configFile = z.object({
+  path: z.literal(CONFIG_FILE).describe('The optional project config: card styles, reference pills and authoring rules. Call read_config for its format.'),
+  text: authoredText.describe('The complete YAML file.'),
+}).strict();
+export const bundleFileSchema = z.union([markdownFile, modelFile, configFile]);
 const authoredFiles = z.array(bundleFileSchema).min(1).max(MAX_BUNDLE_FILES);
 export const storedBundleSchema = z.object({ scope: z.uuid(), revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER), files: authoredFiles }).strict();
 export type BundleFile = z.infer<typeof bundleFileSchema>;
@@ -41,7 +46,7 @@ export interface BundlePersistence {
 
 export const bundleInput = z.object({
   expectedRevision: z.number().int().min(0).describe('0 only for an empty bundle; otherwise read_docs returns the current revision, including after a durable-store restart.'),
-  files: z.array(bundleFileSchema).min(1).max(MAX_BUNDLE_FILES).describe(`Every page, plus any linked .tla and .cfg files. Model files count toward the ${MAX_BUNDLE_FILES}-file limit.`),
+  files: z.array(bundleFileSchema).min(1).max(MAX_BUNDLE_FILES).describe(`Every page, plus any linked .tla and .cfg files and the optional docs/state/nessa-docs.yaml. Model and config files count toward the ${MAX_BUNDLE_FILES}-file limit.`),
 }).strict();
 
 /** A closed virtual repository: only submitted Markdown exists, never laptop paths. */

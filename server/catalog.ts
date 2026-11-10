@@ -11,6 +11,8 @@ import { parseDocumentFile, type ParsedDocument } from './document.js';
 import type { RepositoryFiles } from './files.js';
 import { isInside } from './path-containment.js';
 import { type DiagramReader, readDiagram as readWithMermaid } from './diagram-reader.js';
+import { textCache } from '../shared/memo.js';
+import { cardFits, CONFIG_FILE, CONFIG_NAME, EMPTY_CONFIG, MAX_CONFIG_BYTES, parseProjectConfig, type ProjectConfig } from './project-config.js';
 
 export const STATE_DIRECTORY = 'docs/state';
 export const ROOT_FILE = `${STATE_DIRECTORY}/README.md`;
@@ -20,6 +22,9 @@ export interface LoaderLimits {
   readonly maxBytes: number;
   readonly maxDepth: number;
 }
+
+/** Markdown files read at once while loading. */
+const READ_CONCURRENCY = 16;
 
 export const DEFAULT_LIMITS: LoaderLimits = { maxFiles: 2000, maxBytes: 1024 * 1024, maxDepth: 12 };
 
@@ -45,12 +50,37 @@ export interface Catalog {
   /** Repository-relative file path → why it was rejected. */
   readonly rejectedFiles: ReadonlyMap<string, readonly CatalogIssue[]>;
   readonly issues: readonly CatalogIssue[];
+  /** docs/state/nessa-docs.yaml as read, or the defaults when it is absent. */
+  readonly config: ProjectConfig;
 }
 
 interface Candidate {
   readonly file: string;
   readonly parsed: ParsedDocument;
   readonly warnings: CatalogIssue[];
+}
+
+// Parsing a file and binding its diagram details depend only on its text, and
+// every request reloads the catalog, so unchanged files are not parsed again.
+const parsedFiles = textCache<ReturnType<typeof parseDocumentFile>>(32 * 1024 * 1024);
+const boundDetails = new WeakMap<DiagramReader, ReturnType<typeof textCache<Promise<Awaited<ReturnType<typeof resolveDiagramDetails>>>>>>();
+
+function bindDetails(entries: Parameters<typeof resolveDiagramDetails>[0], body: string, read: DiagramReader) {
+  if (entries.length === 0) return resolveDiagramDetails(entries, body, read);
+  let cache = boundDetails.get(read);
+  if (!cache) {
+    cache = textCache(16 * 1024 * 1024);
+    boundDetails.set(read, cache);
+  }
+  const key = `${JSON.stringify(entries)}\0${body}`;
+  const found = cache.get(key);
+  if (found) return found;
+  const pending = resolveDiagramDetails(entries, body, read);
+  cache.set(key, pending);
+  // A failed binding is not remembered.
+  const owner = cache;
+  pending.catch(() => owner.delete(key));
+  return pending;
 }
 
 export async function loadCatalog(
@@ -89,6 +119,7 @@ export async function loadCatalog(
 
   // Walk docs/state, reading Markdown files only.
   const texts: { file: string; text: string }[] = [];
+  const found: { file: string; absolute: string }[] = [];
   let fileCount = 0;
   let stopped = false;
   const walk = async (absolute: string, relative: string, depth: number): Promise<void> => {
@@ -124,20 +155,51 @@ export async function loadCatalog(
           stopped = true;
           return;
         }
-        const read = await files.readText(childAbsolute, limits.maxBytes, state.realPath);
-        if (read.kind === 'text') texts.push({ file: childRelative, text: read.text });
-        else if (read.kind === 'too-large') {
-          issue(childRelative, 'file-too-large', `${read.size} bytes exceeds the ${limits.maxBytes}-byte limit`);
-        } else {
-          issue(childRelative, 'unreadable-file', `could not be read: ${read.reason}`);
-        }
+        found.push({ file: childRelative, absolute: childAbsolute });
       }
     }
   };
   await walk(state.realPath, STATE_DIRECTORY, 0);
 
+  // Read the files found, several at a time (the reads are independent), keeping walk order.
+  const reads = new Array<Awaited<ReturnType<RepositoryFiles['readText']>>>(found.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(READ_CONCURRENCY, found.length) }, async () => {
+    while (next < found.length) {
+      const at = next++;
+      reads[at] = await files.readText((found[at] as { absolute: string }).absolute, limits.maxBytes, state.realPath);
+    }
+  }));
+  found.forEach(({ file }, at) => {
+    const read = reads[at] as Awaited<ReturnType<RepositoryFiles['readText']>>;
+    if (read.kind === 'text') texts.push({ file, text: read.text });
+    else if (read.kind === 'too-large') {
+      issue(file, 'file-too-large', `${read.size} bytes exceeds the ${limits.maxBytes}-byte limit`);
+    } else {
+      issue(file, 'unreadable-file', `could not be read: ${read.reason}`);
+    }
+  });
+
   const version = createHash('sha256');
   for (const { file, text } of texts) version.update(file).update('\0').update(text).update('\0');
+
+  // The optional project config. Its problems are errors on the config file; the valid parts still apply.
+  let config: ProjectConfig = EMPTY_CONFIG;
+  const configPath = posix.join(state.realPath, CONFIG_NAME);
+  const configFile = await files.inspect(configPath);
+  if (configFile.kind === 'file') {
+    const read = await files.readText(configPath, MAX_CONFIG_BYTES, state.realPath);
+    if (read.kind === 'text') {
+      version.update(CONFIG_FILE).update('\0').update(read.text).update('\0');
+      const outcome = parseProjectConfig(read.text);
+      config = outcome.config;
+      for (const problem of outcome.problems) issue(CONFIG_FILE, 'invalid-config', problem.message);
+    } else {
+      issue(CONFIG_FILE, 'invalid-config', read.kind === 'too-large' ? `${read.size} bytes exceeds the ${MAX_CONFIG_BYTES}-byte limit; defaults are used` : `could not be read: ${read.reason}`);
+    }
+  } else if (configFile.kind !== 'missing') {
+    issue(CONFIG_FILE, 'invalid-config', `${CONFIG_FILE} is not a regular file and was not read`);
+  }
 
   // Parse each file on its own.
   const candidates: Candidate[] = [];
@@ -147,7 +209,7 @@ export async function loadCatalog(
     rejected.set(file, [...(rejected.get(file) ?? []), entry]);
   };
   for (const { file, text } of texts) {
-    const outcome = parseDocumentFile(text);
+    const outcome = parsedFiles.get(text) ?? parsedFiles.set(text, parseDocumentFile(text));
     if (outcome.kind === 'rejected') {
       for (const problem of outcome.problems) {
         if (problem.code === 'unknown-field') issue(file, problem.code, problem.message, outcome.declaredId, 'warning');
@@ -318,10 +380,23 @@ export async function loadCatalog(
   const detailsById = new Map<string, readonly DiagramDetail[]>();
   for (const candidate of accepted) {
     const { id, diagramDetails, body } = candidate.parsed;
-    const resolution = await resolveDiagramDetails(diagramDetails, body, readDiagram);
+    const resolution = await bindDetails(diagramDetails, body, readDiagram);
     detailsById.set(id, resolution.details);
     for (const problem of resolution.problems) {
       candidate.warnings.push(issue(candidate.file, problem.code, problem.message, id, 'warning'));
+    }
+    const diagrams = markdownDiagrams(lexMarkdown(body));
+    diagrams.forEach((diagram, index) => {
+      if (diagram.card === null) return;
+      const card = Object.hasOwn(config.cards, diagram.card) ? config.cards[diagram.card] : undefined;
+      if (card === undefined) {
+        candidate.warnings.push(issue(candidate.file, 'unknown-card', `diagram ${index} names card "${diagram.card}", which ${CONFIG_FILE} does not define; it is drawn as a plain card`, candidate.parsed.id, 'warning'));
+      } else if (!cardFits(card, diagram.source)) {
+        candidate.warnings.push(issue(candidate.file, 'card-family-mismatch', `diagram ${index} uses card "${card.name}", which is for ${card.family} charts; it is drawn as a plain card`, candidate.parsed.id, 'warning'));
+      }
+    });
+    if (config.requireSourceRevision && candidate.parsed.sourceRevision === undefined) {
+      candidate.warnings.push(issue(candidate.file, 'missing-source-revision', `${CONFIG_FILE} requires sourceRevision on every page`, candidate.parsed.id, 'warning'));
     }
   }
   for (const candidate of accepted) {
@@ -393,6 +468,7 @@ export async function loadCatalog(
     documentByFile: idByFile,
     rejectedFiles: rejected,
     issues,
+    config,
   };
 }
 
@@ -405,6 +481,7 @@ function emptyCatalog(repoRoot: string | null, issues: CatalogIssue[]): Catalog 
     documentByFile: new Map(),
     rejectedFiles: new Map(),
     issues,
+    config: EMPTY_CONFIG,
   };
 }
 

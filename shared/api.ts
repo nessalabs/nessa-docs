@@ -75,7 +75,13 @@ export type IssueCode =
   | 'ambiguous-detail-section'
   | 'duplicate-detail-selector'
   | 'missing-model-file'
-  | 'duplicate-model';
+  | 'duplicate-model'
+  // docs/state/nessa-docs.yaml (server/project-config.ts).
+  | 'invalid-config'
+  | 'unknown-card'
+  | 'card-family-mismatch'
+  | 'unresolved-reference'
+  | 'missing-source-revision';
 
 export type IssueSeverity = 'error' | 'warning';
 
@@ -155,6 +161,55 @@ export interface DiagramDetail {
   };
 }
 
+/** The Mermaid chart a card style is meant for; `any` takes every chart. */
+export const CARD_FAMILIES = ['state', 'sequence', 'flowchart', 'any'] as const;
+export type CardFamily = (typeof CARD_FAMILIES)[number];
+
+/** A diagram card style a page may name on its Mermaid fence (`card=handoff`). */
+export interface CardStyle {
+  readonly name: string;
+  /** Which built-in look draws it. */
+  readonly look: 'lifecycle' | 'handoff' | 'map' | 'plain';
+  readonly family: CardFamily;
+  /** Shown in the card header when the fence names no title. */
+  readonly label: string;
+}
+
+/**
+ * The roles a state can be tagged with (`class Pending waiting` in Mermaid).
+ * Fixed on purpose, so a colour means the same thing on every page.
+ */
+export const STATE_ROLES = ['start', 'working', 'waiting', 'done', 'refused', 'uncertain', 'ended'] as const;
+export type StateRole = (typeof STATE_ROLES)[number];
+
+/** What a reference pill shows in its peek: a page, a section of one, or a note file. */
+export interface ReferencePreview {
+  readonly title: string;
+  /** Markdown, frontmatter removed; cut at a block boundary when long. */
+  readonly body: string;
+  readonly truncated: boolean;
+  /** Every href in `body`, resolved relative to the previewed file. */
+  readonly links: Readonly<Record<string, LinkTarget>>;
+  /** The file the preview came from, repository-relative. */
+  readonly file: string;
+}
+
+/** A matched reference after the server resolved it. */
+export interface ResolvedReference {
+  readonly rule: string;
+  /** Text drawn in the pill. */
+  readonly label: string;
+  readonly target: LinkTarget;
+  /** Present for a page, section or note the reader can show in place. */
+  readonly preview: ReferencePreview | null;
+}
+
+/** A reference pattern as the browser receives it: the same split the server used. */
+export interface ReferenceRuleView {
+  readonly name: string;
+  readonly match: string;
+}
+
 export interface DocumentResponse {
   readonly version: string;
   readonly document: DocumentSummary;
@@ -172,6 +227,12 @@ export interface DocumentResponse {
   readonly children: readonly DocumentSummary[];
   /** Warnings that apply to this document. */
   readonly issues: readonly CatalogIssue[];
+  /** Patterns from the project config, in order; the browser splits text with them (shared/references.ts). */
+  readonly referenceRules: readonly ReferenceRuleView[];
+  /** Every reference found in the body, keyed by referenceKey(rule, text). */
+  readonly references: Readonly<Record<string, ResolvedReference>>;
+  /** Card styles this project offers, by name. */
+  readonly cards: Readonly<Record<string, CardStyle>>;
 }
 
 export interface UnknownDocumentResponse {

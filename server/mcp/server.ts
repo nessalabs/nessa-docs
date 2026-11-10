@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { snapshotSchema } from '../../shared/mcp-payload.js';
 import { portableSchema } from './schema.js';
 import { DocumentBundle, bundleFileText, bundleInput, type BundleFile } from './bundle.js';
+import { configView, CONFIG_GUIDE } from './config-view.js';
 import type { BundleSnapshot } from '../../shared/mcp.js';
 import { BROKEN_RULE_LIMITS, CHECKER_STATES, CHECK_RUN_STATES } from '../../shared/model-check.js';
 import { createCheckerCache } from '../model-check/cache.js';
@@ -75,6 +76,22 @@ export function createDocsMcpServer(html: string, bundle = new DocumentBundle(),
     outputSchema,
     _meta: { ui: { visibility: ['model', 'app'] } },
   }, () => safely(() => bundle.read()));
+  server.registerTool('read_config', {
+    description: 'Read the project config (docs/state/nessa-docs.yaml) that a skill follows when writing pages: the diagram card styles a Mermaid fence may name, the fixed state roles, the reference patterns that become clickable pills and where they open, and the authoring rules. Pass text to check a draft config without saving it. Returns the defaults when the bundle has no config.',
+    inputSchema: z.object({ text: z.string().max(65536).optional().describe('A draft nessa-docs.yaml to check; nothing is saved.') }).strict(),
+    annotations: readOnly,
+    _meta: { ui: { visibility: ['model'] } },
+  }, (input) => {
+    try {
+      const snapshot = bundle.readOptional();
+      const saved = snapshot?.files.find((file) => file.path === 'docs/state/nessa-docs.yaml');
+      const text = input.text ?? (saved && 'text' in saved ? saved.text : null);
+      const view = configView(text);
+      return { content: [{ type: 'text' as const, text: `${CONFIG_GUIDE}\n\n${JSON.stringify(view, null, 2)}` }], structuredContent: view };
+    } catch (error) {
+      return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : 'The config could not be read.' }] };
+    }
+  });
   server.registerTool('check_model', {
     description: 'Check a statechart page\'s TLA+ model with TLC, the same checker as the app\'s Check rules button. Pass a page path from the current bundle, or spec plus config text. Returns rules held, rules broken with a plain-language path, rules not checked, and the state count. A missing checker is reported and can be installed; it is not a pass. This checks the design, not the code. Not checked is not a pass. A finished check of a bundle page saves modelCheck on that page.',
     inputSchema: checkInput,

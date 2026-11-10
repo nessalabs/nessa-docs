@@ -35,16 +35,20 @@ diagramDetails:
 # Submit or cancel an order
 
 A draft can be paid or cancelled. A submitted order cannot be cancelled here.
-The code returns the updated order to its caller, who is responsible for saving it.
+The code returns the updated order to its caller, who is responsible for saving it
+(ADR-1).
 The chart starts with a draft supplied by the caller. This example does not create
 or store orders itself.
 
-```mermaid
+```mermaid card=lifecycle
 stateDiagram-v2
     [*] --> Draft
     Draft --> Submitted: Submit [payment accepted]
     Draft --> Draft: Submit [payment refused]
     Draft --> Cancelled: Cancel
+    class Draft waiting
+    class Submitted done
+    class Cancelled ended
 ```
 
 ## Draft order
@@ -76,7 +80,7 @@ requesting payment. Trying to cancel a submitted or cancelled order raises an er
 
 ## Who handles payment
 
-```mermaid
+```mermaid card=handoff
 sequenceDiagram
     participant Caller
     participant Orders as Order code

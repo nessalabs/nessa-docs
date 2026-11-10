@@ -242,3 +242,114 @@ Standard shows the opening explanation, at most two blocks before a nested
 heading. Full shows the whole authored section. Compact hides labels and notes
 visually while preserving access to their explanations. Keep the important
 condition and uncertainty in the first short paragraphs.
+
+## Project config
+
+A project can add one optional file, `docs/state/nessa-docs.yaml`. It is the
+single place a project chooses its diagram cards, its reference pills, the
+folders those pills may show, and its authoring rules. Without it a project
+reads exactly as before. A skill that writes pages for this project reads this
+file first (or calls `read_config` over MCP) and uses only what it lists.
+
+```yaml
+version: 1
+
+cards:                       # optional; the four built-in cards always exist
+  pairing: { look: handoff, label: Pairing }
+
+references:                  # checked in order; the first match wins
+  - name: adr
+    match: 'ADR-?(?<n>\d{1,4})'
+    label: 'ADR {n}'
+    open:                    # tried in order; the first that resolves wins
+      - { file: 'docs/adr/{n:04}-*.md' }                    # one file per ADR
+      - { file: 'docs/decisions.md', heading: 'ADR-{n} *' } # one heading per ADR
+  - name: issue
+    match: 'nessa-agent#(?<n>\d+)'
+    open: { url: 'https://github.com/nessalabs/nessa-agent/issues/{n}' }
+  - name: page
+    match: '\[\[(?<id>[a-z0-9-]+)\]\]'
+    open: { document: '{id}' }
+
+notes:                       # repository folders or files a pill may show
+  - docs/adr
+  - docs/decisions.md
+
+authoring:
+  requireSourceRevision: true
+```
+
+Each problem in the file is an `invalid-config` error in Health, and the valid
+parts still apply: one bad pattern does not turn off the others. Unknown
+sections and fields are refused rather than ignored.
+
+### Diagram cards and state roles
+
+A card is the frame drawn around one Mermaid chart. Name it on the fence; the
+rest of the fence line is ignored by GitHub, so the page still renders there:
+
+````markdown
+```mermaid card=lifecycle title="Order status"
+stateDiagram-v2
+    [*] --> Draft
+    Draft --> Submitted: Submit [payment accepted]
+    class Draft waiting
+    class Submitted done
+```
+````
+
+| Card | For | What it adds |
+| --- | --- | --- |
+| `lifecycle` | `stateDiagram-v2` | States coloured by role, and a legend of the roles used |
+| `handoff` | `sequenceDiagram` | A Handoff header and numbered steps (Mermaid `autonumber`) |
+| `map` | `flowchart` / `graph` | A Map header |
+| `plain` | any chart | Today's look |
+
+A project card in `cards` gives a new name and label to one of these looks.
+A card that is unknown, or that does not suit its chart (a `handoff` on a state
+diagram), is a Health warning and is drawn as `plain`. `title` replaces the
+heading caption in the card header.
+
+A state role is a fixed meaning, so a colour means the same on every page:
+`start`, `working`, `waiting`, `done`, `refused`, `uncertain`, `ended`. Tag a
+state with Mermaid's own class syntax, `class Pending waiting` or
+`Pending:::waiting`. Roles work in any state or flowchart chart. The role
+names are reserved: a `classDef` of the same name is drawn with the role's
+colour. Tag what the code makes true, not what you hope: `done` means the
+outcome is final in the code you read.
+
+### Reference pills
+
+A reference pill is plain text that matches a `references` pattern. `ADR-202`
+in a sentence becomes a pill; clicking it opens the referenced page, section or
+note in a peek beside the page, with a way to open the page in full.
+
+- `match` is a JavaScript regular expression. Named groups such as `(?<n>...)`
+  fill the templates. A pattern that can take very long (a repeated group that
+  itself repeats, such as `(a+)+`), uses back-references, is longer than 256
+  characters, or matches empty text is refused.
+- A match never splits a word: `XADR-1` and `ADR-12a` are not references.
+  Matching looks inside one run of plain text only. Text in code, code blocks,
+  link text, raw HTML and diagrams is never a pill, so write `` `ADR-1` `` to
+  keep it literal.
+- `label` is what the pill shows. `{0}` is the whole match, `{name}` a group,
+  `{n:04}` the group padded with zeros to 4 digits.
+- `open` is one target or a list, tried in order:
+  - `{ document: '{id}', heading?: '...' }` opens an accepted page by its id.
+  - `{ file: 'path/{n}-*.md', heading?: '...' }` opens a repository file. `*`
+    is allowed only in the last part of the path. A value filled from a match
+    cannot contain `/` or `..`. A file under `docs/state` opens as its page.
+    Any other file is shown only when it is a Markdown file under a `notes`
+    entry; otherwise the pill only names the file.
+  - `{ url: 'https://...' }` opens a web page. Values are URL-encoded.
+  - `heading` picks one section of the file, matched like a file glob against
+    the heading text, ignoring case. The section ends at the next heading of
+    the same or higher level.
+- A target that matches two files or two headings is never guessed: the pill
+  shows as unresolved with the reason, and Health lists it as
+  `unresolved-reference`. So does a match that no target resolves.
+
+The server finds and resolves every pill when it serves a page; the browser
+draws them from that answer and never builds a link itself. Over MCP, `file`
+targets do not exist (a bundle holds only `docs/state`), so use `document`
+and `url` targets there.

@@ -1,7 +1,8 @@
 import { MAX_BUNDLE_FILES } from './mcp-limits.js';
 // Validate the bridge payload before allowing it into the shared renderer.
 import { z } from 'zod';
-import { DOCUMENT_KINDS, DOCUMENT_STATUSES } from './api.js';
+import { CARD_FAMILIES, DOCUMENT_KINDS, DOCUMENT_STATUSES } from './api.js';
+import { MAX_PATTERN_LENGTH, MAX_REFERENCE_RULES } from './references.js';
 import { BROKEN_RULE_LIMITS } from './model-check.js';
 import type { BundleSnapshot } from './mcp.js';
 const id = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
@@ -32,7 +33,12 @@ const detail = z.object({ diagram: z.number().int().nonnegative(), family: z.enu
   z.object({ kind: z.literal('node'), node: z.string() }),
   z.object({ kind: z.literal('edge'), from: z.string(), to: z.string(), label: z.string(), element: z.string() }),
 ]) });
-const response = z.object({ version: z.string(), document: summary, body: z.string().max(65536), links: z.record(z.string(), target), sources: z.array(z.object({ raw: z.string(), target })), diagramLinks: z.record(z.string(), crumb), diagramDetails: z.array(detail), breadcrumbs: z.array(crumb), children: z.array(summary), issues: z.array(issue) });
+const preview = z.object({ title: z.string().max(500), body: z.string().max(65536), truncated: z.boolean(), links: z.record(z.string(), target), file: z.string() }).strict();
+const reference = z.object({ rule: z.string(), label: z.string().max(500), target, preview: preview.nullable() }).strict();
+const card = z.object({ name: z.string(), look: z.enum(['lifecycle', 'handoff', 'map', 'plain']), family: z.enum(CARD_FAMILIES), label: z.string().max(60) }).strict();
+const rule = z.object({ name: z.string(), match: z.string().max(MAX_PATTERN_LENGTH) }).strict();
+const response = z.object({ version: z.string(), document: summary, body: z.string().max(65536), links: z.record(z.string(), target), sources: z.array(z.object({ raw: z.string(), target })), diagramLinks: z.record(z.string(), crumb), diagramDetails: z.array(detail), breadcrumbs: z.array(crumb), children: z.array(summary), issues: z.array(issue),
+  referenceRules: z.array(rule).max(MAX_REFERENCE_RULES), references: z.record(z.string(), reference), cards: z.record(z.string(), card) });
 const bundleFile = z.union([z.object({ path: z.string(), markdown: z.string().max(65536) }).strict(), z.object({ path: z.string(), text: z.string().max(65536) }).strict()]);
 export const snapshotSchema = z.object({ storage: z.discriminatedUnion('kind', [z.object({kind:z.literal('memory')}), z.object({kind:z.literal('durable'),status:z.enum(['synced','unconfirmed']),projectPath:z.string()})]), files: z.array(bundleFile).min(1).max(MAX_BUNDLE_FILES), scope: z.uuid(), revision: z.number().int().positive(), catalog: z.object({ version: z.string(), rootId: id, documents: z.array(summary).min(1).max(MAX_BUNDLE_FILES), issues: z.array(issue) }), documents: z.array(response).min(1).max(MAX_BUNDLE_FILES) });
 
@@ -45,15 +51,18 @@ function authoredRecord<S extends z.ZodType>(raw: unknown, schema: S): Record<st
 
 export function readSnapshot(value: unknown): BundleSnapshot {
   const shape = snapshotSchema.parse(value);
-  const raw = z.object({ documents: z.array(z.object({ links: z.unknown(), diagramLinks: z.unknown() })) }).parse(value);
+  const raw = z.object({ documents: z.array(z.object({ links: z.unknown(), diagramLinks: z.unknown(), references: z.unknown(), cards: z.unknown() })) }).parse(value);
   const parsed = { ...shape, documents: shape.documents.map((doc, index) => ({ ...doc,
     links: authoredRecord(raw.documents[index]!.links, target),
     diagramLinks: authoredRecord(raw.documents[index]!.diagramLinks, crumb),
+    references: Object.fromEntries(Object.entries(authoredRecord(raw.documents[index]!.references, reference)).map(([key, value]) => [key, value.preview ? { ...value, preview: { ...value.preview, links: authoredRecord((value.preview as { links: unknown }).links, target) } } : value])),
+    cards: authoredRecord(raw.documents[index]!.cards, card),
   })) };
   const ids = new Set(parsed.documents.map((doc) => doc.document.id));
   if (ids.size !== parsed.documents.length || !ids.has(parsed.catalog.rootId) || parsed.catalog.documents.some((doc) => !ids.has(doc.id))) throw new Error('Inconsistent document bundle.');
   for (const doc of parsed.documents) {
-    if (doc.version !== parsed.catalog.version || Object.values(doc.diagramLinks).some((link) => !ids.has(link.id)) || Object.values(doc.links).some((link) => link.kind === 'document' && !ids.has(link.id))) throw new Error('Document reference is outside this bundle.');
+    if (doc.version !== parsed.catalog.version || Object.values(doc.diagramLinks).some((link) => !ids.has(link.id)) || Object.values(doc.links).some((link) => link.kind === 'document' && !ids.has(link.id))
+      || Object.values(doc.references).some((ref) => ref.target.kind === 'document' && !ids.has(ref.target.id))) throw new Error('Document reference is outside this bundle.');
   }
   // The server owns the finite issue-code vocabulary; the UI only displays it.
   return parsed as unknown as BundleSnapshot;

@@ -1,0 +1,14 @@
+# Project config for Nessa Docs: card styles, reference pills and authoring
+# rules. Format: skills/nessa-docs/references/format.md#project-config.
+version: 1
+
+references:
+  # ADR-1 in any page becomes a pill that opens that decision.
+  - name: adr
+    match: 'ADR-?(?<n>\d{1,4})'
+    label: 'ADR {n}'
+    open:
+      - { file: 'docs/decisions.md', heading: 'ADR-{n} *' }
+
+notes:
+  - docs/decisions.md
