@@ -10,6 +10,7 @@ sources:
   - shared/lifecycle.ts
   - skills/nessa-docs/references/lifecycle.json
   - src/work-view.tsx
+sourceRevision: "c02ec15ba90462875ecdf673351211caed7e00ff"
 diagramLinks:
   Replay: work-lifecycle
 work:

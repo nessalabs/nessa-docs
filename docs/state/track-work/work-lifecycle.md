@@ -9,6 +9,7 @@ sources:
   - skills/nessa-docs/references/lifecycle.json
   - shared/lifecycle.ts
   - server/work.ts
+sourceRevision: "c02ec15ba90462875ecdf673351211caed7e00ff"
 diagramLinks: {}
 model:
   spec: tla/track-work/WorkLifecycle.tla
@@ -36,9 +37,9 @@ diagramDetails:
     edge: { from: review, to: implemented, label: "merge [commit]" }
     section: A page follows its tasks
 modelCheck:
-  sourceRevision: "4b98c3aa9e8fc8dd8c3abebd4b4e1f319b6fb5b6"
+  sourceRevision: "c02ec15ba90462875ecdf673351211caed7e00ff"
   checker: tlc-1.7.4
-  date: 2026-11-10T08:15:27.037Z
+  date: 2026-11-10T08:29:15.587Z
   config: tla/track-work/WorkLifecycle.cfg
   modelDigest: 2b4c2b6d75fab213f8784c9d582a6226c6b3ff368ef2cd544af12865967d6b7d
   states: 993
