@@ -48,7 +48,7 @@ export async function runJourneys(engine) {
     c.check('root: every child row carries a trailing chevron', (await page.locator(`${S.childRows} .child-chevron`).count()) === 3);
     facts.rootNodes = await nodeLinkFacts(page);
     const rn = facts.rootNodes;
-    c.check('root: only diagramLinks nodes are links (role, tab stop, "Open …" label)', rn.linked === 3 && rn.linkedWithRole === 3 && rn.targets.sort().join() === 'chat,desktop,gateway', rn);
+    c.check('root: only diagramLinks nodes are controls (button, tab stop, "Overview of …" label)', rn.linked === 3 && rn.linkedWithRole === 3 && rn.targets.sort().join() === 'chat,desktop,gateway', rn);
     c.check('root: unlinked nodes stay inert (no role, no tab stop, no mark, no pointer)', rn.unlinked >= 2 && rn.unlinkedInert === rn.unlinked, rn);
     c.check('root: linked nodes differ at rest — mark, fill and border', rn.linkedWithMark === 3 && rn.insetCues === 0 && rn.linkedStyle.fill !== rn.unlinkedStyle.fill && rn.linkedStyle.stroke !== rn.unlinkedStyle.stroke && rn.markProblems === 0, {
       linked: rn.linkedStyle,
@@ -74,6 +74,8 @@ export async function runJourneys(engine) {
 
     // 2. Diagram drilldown: system → service (flowchart node).
     await page.locator(S.diagramNode('chat')).first().click();
+    // A linked node shows the page's overview first; Open page goes there.
+    await page.locator('dialog.reference-peek[open] .inspector-open a').click();
     await waitForDocument(page, 'chat');
     await waitForDiagrams(page);
     facts.chat = await svgFacts(page);
@@ -100,12 +102,16 @@ export async function runJourneys(engine) {
 
     // 3. Service → feature (state diagram node) → flow (flowchart node).
     await page.locator(S.diagramNode('chat-send')).first().click();
+    // A linked node shows the page's overview first; Open page goes there.
+    await page.locator('dialog.reference-peek[open] .inspector-open a').click();
     await waitForDocument(page, 'chat-send');
     await waitForDiagrams(page);
     c.check('diagram→feature: URL', path() === '/docs/chat-send', { path: path() });
     facts.featurePlacement = await firstDiagramPlacement(page);
     c.check('feature: diagram first — begins ≤ 180px, spans the column', facts.featurePlacement.figureTop <= 180 && facts.featurePlacement.width >= facts.featurePlacement.columnWidth - 2, facts.featurePlacement);
     await page.locator(S.diagramNode('chat-send-first')).first().click();
+    // A linked node shows the page's overview first; Open page goes there.
+    await page.locator('dialog.reference-peek[open] .inspector-open a').click();
     await waitForDocument(page, 'chat-send-first');
     await waitForDiagrams(page);
     facts.flow = await svgFacts(page);
@@ -188,6 +194,8 @@ export async function runJourneys(engine) {
     facts.sequence = await svgFacts(page);
     c.check('sequence: participant linked', facts.sequence[0]?.linkedNodes >= 1, facts.sequence);
     await page.locator(S.diagramNode('gateway')).first().click();
+    // A linked node shows the page's overview first; Open page goes there.
+    await page.locator('dialog.reference-peek[open] .inspector-open a').click();
     await waitForDocument(page, 'gateway');
     c.check('sequence participant → gateway', path() === '/docs/gateway');
 
@@ -301,6 +309,7 @@ export async function runJourneys(engine) {
     await page.locator(S.diagramNode('desktop')).first().focus();
     const focused = await activeElement(page);
     await page.keyboard.press('Enter');
+    await page.locator('dialog.reference-peek[open] .inspector-open a').click();
     await waitForDocument(page, 'desktop');
     c.check('keyboard: Enter on focused diagram node navigates', path() === '/docs/desktop' && focused?.targetId === 'desktop', { focused });
 

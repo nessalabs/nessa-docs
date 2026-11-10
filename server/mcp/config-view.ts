@@ -11,6 +11,7 @@ export const CONFIG_GUIDE = [
   'Cards: name one on a Mermaid fence, e.g. ```mermaid card=handoff title="Pair a phone"; the card must suit the chart (lifecycle = stateDiagram-v2, handoff = sequenceDiagram, map = flowchart, plain = any).',
   `State roles: tag a state with Mermaid's class line, e.g. "class Pending waiting". Roles: ${STATE_ROLES.join(', ')}.`,
   'References: plain text matching a pattern becomes a pill, never inside code or link text. open targets are tried in order: { document, heading? }, { file, heading? } or { url }.',
+  'Glossary: a page named glossary.md lists the acronyms of its folder and below, one "## TERM" heading each with a paragraph saying what it stands for and is. Every use of a term links to its entry and shows that paragraph on hover; Health warns (unlisted-acronym) when a covered page uses an acronym none of its glossaries lists. A reference may not be named glossary.',
   'Work: a page may plan tasks in a work block ({ id, title, anchor: { diagram, node | edge }, dependsOn? }); progress is one record file per change under docs/state/work/<page>/<task>/<at>-<by>.md, never edited. lifecycle lists the states and events; work.people may accept or answer.',
 ].join('\n');
 

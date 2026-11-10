@@ -7,7 +7,7 @@
 import { parseDocument } from 'yaml';
 import type { CardFamily, CardStyle } from '../shared/api.js';
 import { LIFECYCLE_EVENTS, type LifecycleEvent, NEED_KINDS, type NeedKind } from '../shared/lifecycle.js';
-import { compileRule, type CompiledRule, MAX_REFERENCE_RULES, type ReferenceRule } from '../shared/references.js';
+import { compileRule, type CompiledRule, GLOSSARY_RULE, MAX_REFERENCE_RULES, type ReferenceRule } from '../shared/references.js';
 
 export const CONFIG_NAME = 'nessa-docs.yaml';
 export const CONFIG_FILE = `docs/state/${CONFIG_NAME}`;
@@ -141,6 +141,7 @@ export function parseProjectConfig(text: string): ConfigOutcome {
         const name = raw.name;
         if (typeof name !== 'string' || !NAME.test(name)) { problem(`${where}: name must be lowercase letters, digits and dashes`); return; }
         if (seen.has(name)) { problem(`${where}: name "${name}" is used twice`); return; }
+        if (name === GLOSSARY_RULE) { problem(`${where}: "${GLOSSARY_RULE}" is the name of the built-in glossary links; choose another name`); return; }
         seen.add(name);
         for (const key of Object.keys(raw)) if (!['name', 'match', 'label', 'open'].includes(key)) problem(`reference "${name}": "${key}" is not a reference field (name, match, label, open)`);
         if (typeof raw.match !== 'string') { problem(`reference "${name}": match must be a regular expression string`); return; }

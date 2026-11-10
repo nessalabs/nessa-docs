@@ -74,7 +74,8 @@ try {
       assert.equal(await page.frames()[1].evaluate(() => {try { return parent.document.title; } catch { return 'blocked'; }}), 'blocked');
       assert.equal(await page.frames()[1].evaluate(async (url) => {try { await fetch(url); return true; } catch { return false; }}, url + '/shown'), false);
       await frame.getByRole('button', {name:'Zoom in',exact:true}).first().click();
-      await frame.getByRole('link', {name:'Open Submit or cancel an order',exact:true}).click();
+      await frame.getByRole('button', {name:'Overview of Submit or cancel an order',exact:true}).click();
+      await frame.getByRole('button', {name:'Open page',exact:true}).click();
       await frame.getByRole('heading', {name:'Submit or cancel an order',exact:true}).waitFor();
       assert(await page.evaluate(() => window.messages.some(message => message.method === 'ui/update-model-context' && JSON.parse(message.params.content[0].text).documentId === 'order-lifecycle')));
       await frame.getByRole('button', {name:'Details: Draft',exact:true}).waitFor();
@@ -141,7 +142,8 @@ try {
       await frame.getByRole('button',{name:'Open Payment provider boundary',exact:true}).click();
       await frame.getByRole('heading',{name:'Payment provider boundary',exact:true}).waitFor();
       await frame.getByRole('button',{name:'Example store',exact:true}).click();
-      await frame.getByRole('link',{name:'Open Submit or cancel an order',exact:true}).click();
+      await frame.getByRole('button',{name:'Overview of Submit or cancel an order',exact:true}).click();
+      await frame.getByRole('button',{name:'Open page',exact:true}).click();
       await frame.getByRole('heading',{name:'Submit or cancel an order',exact:true}).waitFor();
       latest = reviewed.structuredContent.snapshot.revision;
       const rootOnly = [{path:'docs/state/README.md',markdown:'---\nid: example-store\ntitle: Example store\nkind: system\nstatus: fixture\nsummary: Root only for refresh verification.\nparent: null\nsources: []\ndiagramLinks: {}\n---\n# Example store\n\nRoot only.\n'}];

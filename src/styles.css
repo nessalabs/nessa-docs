@@ -2150,6 +2150,96 @@ figure {
   color: var(--muted);
   cursor: help;
 }
+/* A glossary term reads as a word with a dotted underline, not a chip. */
+.ref-pill[data-ref-rule='glossary'] {
+  display: inline;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  vertical-align: baseline;
+  text-decoration: underline dotted color-mix(in oklab, var(--foreground) 45%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  cursor: help;
+}
+.ref-pill[data-ref-rule='glossary']:hover {
+  background: none;
+  text-decoration-color: var(--ink);
+}
+
+/* The hover card: what a pill points at, before anyone clicks it. */
+.ref-hover {
+  position: relative;
+}
+.ref-card {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  width: max-content;
+  max-width: min(22rem, calc(100vw - 32px));
+  padding: 9px 11px;
+  border-radius: var(--radius-panel);
+  background: var(--pane);
+  box-shadow:
+    inset 0 0 0 1px var(--rim),
+    0 12px 32px -12px rgb(0 0 0 / 45%);
+  color: var(--ink);
+  font-size: var(--text-small);
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+}
+/* The gap between pill and card stays part of the hover, so the pointer can move onto the card. */
+.ref-card::before {
+  content: '';
+  position: absolute;
+  inset: -8px 0 auto;
+  height: 8px;
+}
+.ref-hover:not([data-card-hidden]):hover > .ref-card,
+.ref-hover:not([data-card-hidden]):has(> .ref-pill:focus-visible) > .ref-card {
+  display: flex;
+  animation: ref-card-in 120ms var(--ease) 250ms both;
+}
+/* A touch has no hover: a tap opens the peek, which already shows all of it. */
+@media (hover: none) {
+  .ref-hover:not([data-card-hidden]):hover > .ref-card {
+    display: none;
+  }
+}
+@keyframes ref-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ref-hover > .ref-card {
+    animation: none !important;
+  }
+}
+.ref-card-title {
+  font-weight: 600;
+}
+.ref-card-gist {
+  color: var(--muted);
+}
+.ref-card-file {
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: var(--text-caption);
+}
 .peek-truncated {
   color: var(--muted);
   font-size: var(--text-small);

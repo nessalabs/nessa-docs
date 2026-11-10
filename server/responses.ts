@@ -1,21 +1,64 @@
 // Builds the API's JSON bodies from a loaded catalog.
 
-import { type Token, walkTokens } from 'marked';
+import { type Token, type Tokens, walkTokens } from 'marked';
 import type {
   CatalogResponse,
   Crumb,
   DocumentResponse,
   LinkTarget,
+  ReferencePreview,
+  ReferenceRuleView,
   SearchResponse,
   SearchResult,
   UnknownDocumentResponse,
 } from '../shared/api.js';
-import { lexMarkdown } from '../shared/markdown.js';
+import { isMermaid, lexMarkdown } from '../shared/markdown.js';
 import type { Catalog } from './catalog.js';
 import type { RepositoryFiles } from './files.js';
 import { resolveReference } from './links.js';
 import { referenceRules } from './project-config.js';
 import { resolvePageReferences } from './references.js';
+import { GLOSSARY_RULE } from '../shared/references.js';
+import { cutText, PREVIEW_TITLE_MAX } from '../shared/api.js';
+import { gistOf } from './glossary.js';
+
+/** The page's glossary terms as the browser receives them, or nothing when no glossary covers it. */
+function glossaryRules(catalog: Catalog, file: string): ReferenceRuleView[] {
+  const glossary = catalog.glossary.pillRuleFor(file);
+  return glossary ? [{ name: GLOSSARY_RULE, terms: glossary.terms }] : [];
+}
+
+/** An overview's body is cut at a block boundary past this many characters. */
+const OVERVIEW_MAX_CHARS = 4000;
+
+/**
+ * A page's overview, shown when a chart node that links to it is clicked: the
+ * page's opening, from below its title to its first section heading, without
+ * its charts, with its summary as the gist. A page with no opening shows its summary alone.
+ */
+async function pageOverview(catalog: Catalog, id: string, files: RepositoryFiles): Promise<ReferencePreview | null> {
+  const document = catalog.documents.get(id);
+  if (!document) return null;
+  const tokens = lexMarkdown(document.body);
+  let at = tokens.findIndex((token) => token.type !== 'space');
+  if (at >= 0 && tokens[at]?.type === 'heading' && (tokens[at] as Tokens.Heading).depth === 1) at += 1;
+  let text = '';
+  let truncated = false;
+  for (const token of tokens.slice(Math.max(at, 0))) {
+    if (token.type === 'heading') break;
+    // The overview is words; the page itself holds its charts.
+    if (isMermaid(token)) continue;
+    if (text.length + token.raw.length > OVERVIEW_MAX_CHARS && text.trim() !== '') {
+      truncated = true;
+      break;
+    }
+    text += token.raw;
+  }
+  if (text.trim() === '') text = `${document.summary.summary}\n`;
+  const links: Record<string, LinkTarget> = {};
+  for (const href of hrefsOf(lexMarkdown(text))) links[href] = await resolveReference(href, { kind: 'file', file: document.summary.file }, catalog, files);
+  return { title: cutText(document.summary.title, PREVIEW_TITLE_MAX), body: text, truncated, links, file: document.summary.file, gist: gistOf(document.summary.summary) };
+}
 
 export const MAX_QUERY_LENGTH = 200;
 const MAX_RESULTS = 25;
@@ -70,6 +113,11 @@ export async function documentResponse(
   }
   const crumb = (target: string): Crumb => ({ id: target, title: catalog.documents.get(target)?.summary.title ?? target });
   const diagramLinks = Object.fromEntries([...document.diagramLinks].map(([node, target]) => [node, crumb(target)]));
+  const linkedOverviews: Record<string, ReferencePreview> = {};
+  for (const target of new Set(document.diagramLinks.values())) {
+    const overview = await pageOverview(catalog, target, files);
+    if (overview) linkedOverviews[target] = overview;
+  }
 
   const breadcrumbs: Crumb[] = [];
   for (let current: string | null = id; current !== null; ) {
@@ -83,6 +131,7 @@ export async function documentResponse(
     links,
     sources,
     diagramLinks,
+    linkedOverviews,
     diagramDetails: document.diagramDetails,
     breadcrumbs,
     children: document.summary.children.flatMap((child) => {
@@ -90,7 +139,7 @@ export async function documentResponse(
       return summary ? [summary] : [];
     }),
     issues: pills.issues.length > 0 ? [...document.warnings, ...pills.issues] : document.warnings,
-    referenceRules: referenceRules(catalog.config),
+    referenceRules: [...referenceRules(catalog.config), ...glossaryRules(catalog, document.summary.file)],
     references: pills.references,
     cards: catalog.config.cards,
     work: document.work,

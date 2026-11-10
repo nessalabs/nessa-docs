@@ -52,6 +52,10 @@ are covered without code:
   `[[page-id]]`): add an entry under `references` with a `match` pattern and
   `open` targets. Point `notes` at the folder that holds the notes so the peek
   can show them.
+- An acronym: list it in the nearest `glossary.md` page (one `## TERM` heading
+  and a paragraph), never in config. That page is the only list of terms;
+  `server/glossary.ts` reads it, and the reader links every use. See the
+  [format reference](skills/nessa-docs/references/format.md#glossary).
 - A diagram that needs its own name and label (`pairing`, `release`): add it
   under `cards` with one of the existing looks.
 - A state that needs a meaning: tag it with one of the fixed roles in Mermaid
@@ -90,7 +94,10 @@ that folder's code.
   listings and note reads within a request (`Scratch` in server/references.ts).
   The browser looks pills up by key and never builds a link.
 - Patterns are compiled once (`compileRule`), and slow pattern shapes are
-  refused at config time rather than timed out at read time.
+  refused at config time rather than timed out at read time. The glossary rule
+  is never authored: both sides build it from the page's terms with
+  `glossaryRegex`, so it skips those checks and has its own speed check in
+  `server/glossary.test.ts` (a thousand terms over a megabyte).
 - `server/references.test.ts` and `shared/references.test.ts` hold the speed
   checks (2,000 references per page, a megabyte of text). Keep them passing
   when you touch this path, and profile with a few hundred generated pages

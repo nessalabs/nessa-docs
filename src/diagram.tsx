@@ -411,6 +411,7 @@ export function Diagram({
   onSelectDetail,
   onExpandedChange,
   onNavigateDocument,
+  onPreviewDocument,
   revealLeftOf = null,
   ruleMarks,
   onSelectRule,
@@ -434,6 +435,8 @@ export function Diagram({
   onExpandedChange?: (expanded: boolean) => void;
   /** A host can own document navigation without changing the chart renderer. */
   onNavigateDocument?: (id: string) => void;
+  /** When given, a node that links to a page shows that page's overview here instead of leaving (the overview offers the page). */
+  onPreviewDocument?: (id: string, element: Element) => void;
   /** Where the open inspector begins on screen (viewport x), when it covers the right of this chart. */
   revealLeftOf?: number | null;
   /** Diagram node id → rules that fail in that state. */
@@ -444,6 +447,8 @@ export function Diagram({
 }) {
   const navigateDocument = useRef(onNavigateDocument);
   navigateDocument.current = onNavigateDocument;
+  const previewDocument = useRef(onPreviewDocument);
+  previewDocument.current = onPreviewDocument;
   const selectRule = useRef(onSelectRule);
   selectRule.current = onSelectRule;
   const appearance = useAppearance();
@@ -580,6 +585,11 @@ export function Diagram({
           element.setAttribute('aria-label', `Details: ${node}${target ? ` (also opens ${target.title})` : ''}`);
           element.setAttribute('data-detail-key', String(entry.key));
           activate(element, () => selectDetail.current?.(entry.key, element));
+        } else if (target && previewDocument.current) {
+          element.setAttribute('role', 'button');
+          element.setAttribute('aria-haspopup', 'dialog');
+          element.setAttribute('aria-label', `Overview of ${target.title}`);
+          activate(element, () => previewDocument.current ? previewDocument.current(target.id, element) : navigate(documentPath(target.id)));
         } else if (target) {
           element.setAttribute('role', 'link');
           element.setAttribute('aria-label', `Open ${target.title}`);

@@ -8,7 +8,8 @@ verification/results and the extraction report record completed runs and skips. 
 | --- | --- | --- |
 | Root renders its system diagram as live Mermaid SVG (no image fallback) with linked service nodes | journeys, real-data | svg element count, linked node count |
 | Every Mermaid block in a real document's Markdown (counted by `shared/markdown.ts`) renders as SVG at its index; a failed, too-large or outdated fallback fails | real-data (every document) | blocks = figures = rendered, fallbacks = 0 |
-| Diagram node click drills root → service → feature → flow; URL, title, breadcrumbs match | journeys, real-data | pathname, breadcrumb count |
+| Diagram node click shows the linked page's overview (its opening, no charts) beside the chart; its Open page drills root → service → feature → flow; URL, title, breadcrumbs match | journeys, real-data | pathname, breadcrumb count |
+| Glossary terms (example store): a term is a dotted word, hover shows its meaning on screen, click opens its entry; a click outside (not a drag, not a control) closes the side panel, details or peek | glossary | hover card box, dialog open |
 | Sequence participants and state nodes are drilldown targets too | journeys | pathname after click |
 | Keyboard: focus a diagram node, Enter navigates; focus lands on the new title | journeys | active element |
 | Sidebar tree navigates root → service → feature → flow; collapse/expand works; current item marked | journeys, real-data | aria-expanded, aria-current |

@@ -28,6 +28,7 @@ function page(id: string, title: string, version = 'catalog'): DocumentResponse 
     links: {},
     sources: [],
     diagramLinks: {},
+    linkedOverviews: {},
     diagramDetails: [],
     breadcrumbs: [{ id, title }],
     children: [],
@@ -177,5 +178,73 @@ describe('sidebar document navigation', () => {
     await show('alpha', reads(() => gate.promise), 'first');
     expect(container.querySelector('[data-page-state="loading"]')?.textContent).toContain('Loading');
     expect(container.querySelector('#doc-title')).toBeNull();
+  });
+});
+
+describe('reference peek', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true);
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: false, media: query, addEventListener: () => undefined, removeEventListener: () => undefined,
+      dispatchEvent: () => false, onchange: null, addListener: () => undefined, removeListener: () => undefined,
+    }));
+    vi.stubGlobal('IntersectionObserver', class { observe() {} disconnect() {} unobserve() {} });
+    // jsdom has no dialog methods; these do what the browser does to `open`.
+    for (const name of ['show', 'showModal'] as const) {
+      HTMLDialogElement.prototype[name] ??= function (this: HTMLDialogElement) { this.setAttribute('open', ''); };
+    }
+    Element.prototype.scrollTo ??= () => undefined;
+    HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) { this.removeAttribute('open'); };
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(async () => {
+    await act(async () => { root.unmount(); });
+    container.remove();
+    vi.unstubAllGlobals();
+  });
+
+  it('shows a glossary term\'s meaning on hover, opens its entry on click, and closes when you click outside', async () => {
+    const entry = { title: 'SDK', body: '## SDK\n\nSoftware development kit.\n', truncated: false, links: {}, file: 'docs/state/glossary.md', gist: 'Software development kit.' };
+    const value: DocumentResponse = {
+      ...page('alpha', 'Alpha', 'peek'),
+      body: '# Alpha\n\nThe SDK sends.\n',
+      referenceRules: [{ name: 'glossary', terms: ['SDK'] }],
+      references: { 'glossary\u0000SDK': { rule: 'glossary', label: 'SDK', target: { kind: 'document', id: 'glossary', fragment: 'sdk' }, preview: entry } },
+    };
+    await act(async () => {
+      root.render(
+        <ProjectContext.Provider value={reads(() => Promise.resolve({ kind: 'ok', value }))}>
+          <DocumentPage id="alpha" catalogVersion="peek" onStaleCatalog={() => undefined} focusOnLoad={false} />
+        </ProjectContext.Provider>,
+      );
+    });
+    const pill = container.querySelector<HTMLButtonElement>('[data-ref-rule="glossary"]');
+    expect(pill?.textContent).toBe('SDK');
+    const card = document.getElementById(pill?.getAttribute('aria-describedby') ?? '');
+    expect(card?.getAttribute('role')).toBe('tooltip');
+    expect(card?.textContent).toContain('Software development kit.');
+
+    await act(async () => { pill?.click(); });
+    const peek = container.querySelector<HTMLDialogElement>('dialog.reference-peek');
+    expect(peek?.open).toBe(true);
+    expect(peek?.textContent).toContain('Software development kit.');
+
+    // A click inside the peek keeps it; a click on the page outside it closes it.
+    const click = async (element: Element | null | undefined, dx = 0) => act(async () => {
+      element?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 10, clientY: 10 }));
+      element?.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, clientX: 10 + dx, clientY: 10 }));
+    });
+    await click(peek?.querySelector('.inspector-body'));
+    expect(peek?.open).toBe(true);
+    await click(container.querySelector('.prose p'), 30);
+    expect(peek?.open).toBe(true);
+    await click(container.querySelector('.prose p'));
+    expect(peek?.open).toBe(false);
   });
 });
