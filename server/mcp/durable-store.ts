@@ -6,14 +6,14 @@ import { constants, type Stats } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { z } from 'zod';
-import { bundleFileText, bundlePath, modelPath, storedBundleSchema, type BundlePersistence, type CommitOutcome, type StoredBundle } from './bundle.js';
+import { bundleFileText, bundlePath, configPath, modelPath, storedBundleSchema, type BundlePersistence, type CommitOutcome, type StoredBundle } from './bundle.js';
 
 type Io = Pick<typeof fs, 'open' | 'mkdir' | 'lstat' | 'realpath' | 'readdir' | 'rename' | 'unlink' | 'rmdir'>;
 export const storeIo: Io = fs;
 const markerSchema = z.object({ format: z.literal('nessa-docs'), version: z.literal(1), scope: z.uuid() }).strict();
 const descriptorSchema = z.object({
   generation: z.uuid().regex(/^[a-f0-9-]+$/), scope: z.uuid(), revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
-  files: z.array(z.object({ path: z.union([bundlePath, modelPath]), bytes: z.number().int().min(0).max(256 * 1024), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict()).min(1).max(MAX_BUNDLE_FILES),
+  files: z.array(z.object({ path: z.union([bundlePath, modelPath, configPath]), bytes: z.number().int().min(0).max(256 * 1024), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict()).min(1).max(MAX_BUNDLE_FILES),
 }).strict();
 const manifestSchema = z.object({ version: z.literal(1), current: descriptorSchema, previous: descriptorSchema.nullable() }).strict();
 type Descriptor = z.infer<typeof descriptorSchema>;

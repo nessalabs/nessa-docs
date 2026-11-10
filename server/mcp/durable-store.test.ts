@@ -317,3 +317,19 @@ it('reopens two full generations with maximum-length paths', async () => {
   await owner.store.close();
   expect((await open(path)).bundle.read().files).toEqual(many);
 });
+
+it('saves and restores the project config in durable mode', async () => {
+  const path = await location();
+  const config = { path: 'docs/state/nessa-docs.yaml', text: 'version: 1\nreferences:\n  - name: adr\n    match: "ADR-(?<n>\\\\d+)"\n    open: { url: "https://example.com/{n}" }\n' };
+  const first = await open(path);
+  const saved = await first.bundle.replace({ expectedRevision: 0, files: [...files(), config] });
+  expect(saved.storage).toMatchObject({ kind: 'durable', status: 'synced' });
+  await first.store.close();
+  const second = await open(path);
+  expect(second.bundle.read().files).toEqual(saved.files);
+  const project = second.bundle.read().storage;
+  if (project.kind !== 'durable') throw new Error('Wrong storage mode');
+  const catalog = await loadCatalog(nodeRepositoryFiles(), project.projectPath);
+  expect(catalog.config.references.map((reference) => reference.source.name)).toEqual(['adr']);
+  expect(catalog.issues.filter((issue) => issue.severity === 'error')).toEqual([]);
+});

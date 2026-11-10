@@ -24,22 +24,99 @@ export type RuleCompilation =
   | { readonly kind: 'ok'; readonly rule: CompiledRule }
   | { readonly kind: 'invalid'; readonly reason: string };
 
-// A quantified group that itself holds a quantifier, such as (a+)+ or (\w*)*,
-// can take exponential time on a near miss. Those are refused rather than run.
-const NESTED_QUANTIFIER = /\((?:[^()\\]|\\.)*[+*}](?:[^()\\]|\\.)*\)(?:[+*]|\{\d+,\d*\})/;
+interface GroupScan {
+  repeats: boolean;
+  alternates: boolean;
+}
+
+/** The quantifier at `at`, if any: its length and whether it can repeat more than once. */
+function quantifierAt(source: string, at: number): { readonly length: number; readonly repeats: boolean } | null {
+  const char = source[at];
+  let length = 0;
+  let repeats = false;
+  if (char === '*' || char === '+') [length, repeats] = [1, true];
+  else if (char === '?') length = 1;
+  else if (char === '{') {
+    const counted = /^\{(\d+)(,(\d*))?\}/.exec(source.slice(at));
+    if (!counted) return null;
+    length = counted[0].length;
+    const most = counted[2] === undefined ? Number(counted[1]) : counted[3] === '' ? Infinity : Number(counted[3]);
+    repeats = most > 1;
+  } else return null;
+  if (source[at + length] === '?') length += 1;
+  return { length, repeats };
+}
+
+/**
+ * Why the pattern could take exponential time on a near miss, or null. A group
+ * that repeats, such as (...)+ or (...){2,}, may hold neither a quantifier nor
+ * a choice (|) at any depth: (a+)+, (?:(a+))+ and (a|a)* all backtrack
+ * exponentially. A one-pass scan of the pattern's structure, so nesting cannot
+ * hide a repetition the way it could from a flat regular expression.
+ */
+export function slowPatternReason(source: string): string | null {
+  const stack: GroupScan[] = [{ repeats: false, alternates: false }];
+  for (let at = 0; at < source.length; ) {
+    const char = source[at]!;
+    if (char === '\\') {
+      // \p{..}, \P{..}, \u{..} carry braces that are not a quantifier.
+      const braced = /^\\[pPu]\{[^}]*\}/.exec(source.slice(at));
+      at += braced ? braced[0].length : 2;
+    } else if (char === '[') {
+      at += 1;
+      while (at < source.length && source[at] !== ']') at += source[at] === '\\' ? 2 : 1;
+      at += 1;
+    } else if (char === '(') {
+      stack.push({ repeats: false, alternates: false });
+      at += 1;
+      continue;
+    } else if (char === ')') {
+      const group = stack.length > 1 ? stack.pop()! : null;
+      at += 1;
+      const quantifier = quantifierAt(source, at);
+      const parent = stack[stack.length - 1]!;
+      if (group) {
+        if (quantifier?.repeats && (group.repeats || group.alternates)) {
+          return group.repeats
+            ? 'a repeated group that itself repeats can be very slow; simplify the pattern'
+            : 'a repeated group with a choice (|) inside can be very slow; simplify the pattern';
+        }
+        parent.repeats ||= group.repeats;
+        parent.alternates ||= group.alternates;
+      }
+      if (quantifier) {
+        parent.repeats = true;
+        at += quantifier.length;
+      }
+      continue;
+    } else if (char === '|') {
+      stack[stack.length - 1]!.alternates = true;
+      at += 1;
+      continue;
+    } else at += 1;
+    // After an atom (a character, escape or class): its quantifier, if any.
+    const quantifier = quantifierAt(source, at);
+    if (quantifier) {
+      stack[stack.length - 1]!.repeats = true;
+      at += quantifier.length;
+    }
+  }
+  return null;
+}
 
 /** Compiles one pattern, or says why it cannot be used. */
 export function compileRule(rule: ReferenceRule): RuleCompilation {
   if (rule.match.length === 0) return { kind: 'invalid', reason: 'the pattern is empty' };
   if (rule.match.length > MAX_PATTERN_LENGTH) return { kind: 'invalid', reason: `the pattern is longer than ${MAX_PATTERN_LENGTH} characters` };
   if (/\\[1-9]|\\k</.test(rule.match)) return { kind: 'invalid', reason: 'back-references are not supported' };
-  if (NESTED_QUANTIFIER.test(rule.match)) return { kind: 'invalid', reason: 'a repeated group that itself repeats can be very slow; simplify the pattern' };
   let regex: RegExp;
   try {
     regex = new RegExp(rule.match, 'gu');
   } catch (error) {
     return { kind: 'invalid', reason: `not a valid regular expression: ${(error as Error).message}` };
   }
+  const slow = slowPatternReason(rule.match);
+  if (slow) return { kind: 'invalid', reason: slow };
   if (regex.test('')) return { kind: 'invalid', reason: 'the pattern matches empty text' };
   regex.lastIndex = 0;
   return { kind: 'ok', rule: { name: rule.name, regex } };
@@ -73,6 +150,11 @@ export function referenceKey(rule: string, text: string): string {
 
 const WORD = /[\p{L}\p{N}_]/u;
 
+/** The index just past the code point at `at`, so a skip never lands inside a surrogate pair. */
+function nextCodePoint(text: string, at: number): number {
+  return at + ((text.codePointAt(at) ?? 0) > 0xffff ? 2 : 1);
+}
+
 /**
  * Every match in `text`, in order and without overlaps. Earlier rules win a tie
  * at the same start; a longer match never splits a word, so `XADR-1` and
@@ -87,7 +169,7 @@ export function findReferences(text: string, rules: readonly CompiledRule[]): Re
       const start = match.index;
       const end = start + match[0].length;
       if (end === start) {
-        regex.lastIndex = start + 1;
+        regex.lastIndex = nextCodePoint(text, start);
         continue;
       }
       const before = start > 0 ? text[start - 1] : '';
@@ -96,7 +178,7 @@ export function findReferences(text: string, rules: readonly CompiledRule[]): Re
       const last = match[0][match[0].length - 1] ?? '';
       // Only a match that starts or ends on a word character can split a word.
       if ((before && WORD.test(before) && WORD.test(first)) || (after && WORD.test(after) && WORD.test(last))) {
-        regex.lastIndex = start + 1;
+        regex.lastIndex = nextCodePoint(text, start);
         continue;
       }
       const groups: Record<string, string> = {};
