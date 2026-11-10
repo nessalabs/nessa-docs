@@ -93,6 +93,7 @@ export async function documentResponse(
     referenceRules: referenceRules(catalog.config),
     references: pills.references,
     cards: catalog.config.cards,
+    work: document.work,
   };
 }
 

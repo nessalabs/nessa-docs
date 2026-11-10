@@ -1,6 +1,7 @@
 // The wire contract between the local API (server/) and the browser (src/).
 // Types only: every rule that produces these values lives in server/.
 
+import type { LifecycleEvent, LifecycleState, ShownState } from './lifecycle.js';
 import type { ModelCheckRecord, ModelLink } from './model-check.js';
 
 export const DOCUMENT_KINDS = [
@@ -38,6 +39,71 @@ export interface DocumentSummary {
   readonly modelCheck?: ModelCheckRecord;
   /** True when the saved check does not match the current checkpoint or model bytes. */
   readonly modelCheckStale?: boolean;
+  /** Where this page's work is, from its records; absent on a page with no work block and no records. */
+  readonly work?: WorkSummary;
+}
+
+/** A page's work at a glance: the sidebar pill and the child list. */
+export interface WorkSummary {
+  readonly state: ShownState;
+  /** UTC time of the newest accepted record for the page or any of its tasks; null when none. */
+  readonly lastRecordAt: string | null;
+  readonly tasks: number;
+  /** Tasks not implemented, verified or dropped. */
+  readonly open: number;
+  readonly blocked: number;
+  /** Records that were refused (each is an error in Health). */
+  readonly refused: number;
+}
+
+/** One `evidence` entry on a record. */
+export type WorkEvidence =
+  | { readonly kind: 'pr'; readonly value: string }
+  | { readonly kind: 'commit'; readonly value: string }
+  | { readonly kind: 'check'; readonly value: string }
+  | { readonly kind: 'diff'; readonly value: string };
+
+/** One record file, as written and as the lifecycle judged it. */
+export interface WorkRecord {
+  /** Repository-relative path, e.g. docs/state/work/<page>/<task>/<at>-<by>.md. */
+  readonly file: string;
+  readonly task: string | null;
+  readonly event: LifecycleEvent;
+  /** The state the record says the event leads to. */
+  readonly state: LifecycleState;
+  readonly at: string;
+  readonly by: string;
+  readonly model?: string;
+  readonly sourceRevision?: string;
+  readonly evidence: readonly WorkEvidence[];
+  /** Markdown; one or two sentences, or the question for `ask`. */
+  readonly body: string;
+  /** Why the lifecycle refused it; null when it moved (or noted) the task. A refused record never moves a box. */
+  readonly refused: string | null;
+}
+
+/** One task of a page's `work` block with the state its records lead to. */
+export interface WorkTask {
+  readonly id: string;
+  readonly title: string;
+  /** The chart element it makes real, when that element was found; otherwise a warning says why. */
+  readonly anchor: { readonly diagram: number; readonly target: DiagramDetailTarget } | null;
+  readonly dependsOn: readonly string[];
+  readonly state: LifecycleState;
+  /** The newest accepted record for this task, or null. */
+  readonly lastRecordAt: string | null;
+  readonly lastBy: string | null;
+}
+
+export interface PageWork {
+  readonly summary: WorkSummary;
+  /** The state the records lead to, before `stale` is worked out. */
+  readonly recorded: LifecycleState;
+  readonly tasks: readonly WorkTask[];
+  /** Every record for the page and its tasks, oldest first (by `at`, then file). */
+  readonly records: readonly WorkRecord[];
+  /** After this many milliseconds with no record, open work is drawn as quiet. */
+  readonly quietAfterMs: number;
 }
 
 /** Why a file was rejected (`error`) or accepted with a caveat (`warning`). */
@@ -81,7 +147,14 @@ export type IssueCode =
   | 'unknown-card'
   | 'card-family-mismatch'
   | 'unresolved-reference'
-  | 'missing-source-revision';
+  | 'missing-source-revision'
+  // Work records under docs/state/work (server/work.ts).
+  | 'invalid-record'
+  | 'unknown-work-page'
+  | 'unknown-work-task'
+  | 'refused-record'
+  | 'unbound-work-anchor'
+  | 'unknown-work-dependency';
 
 export type IssueSeverity = 'error' | 'warning';
 
@@ -233,6 +306,8 @@ export interface DocumentResponse {
   readonly references: Readonly<Record<string, ResolvedReference>>;
   /** Card styles this project offers, by name. */
   readonly cards: Readonly<Record<string, CardStyle>>;
+  /** The page's tasks and records; null when it has neither. */
+  readonly work: PageWork | null;
 }
 
 export interface UnknownDocumentResponse {

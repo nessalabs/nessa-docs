@@ -6,6 +6,7 @@
 
 import { parseDocument } from 'yaml';
 import type { CardFamily, CardStyle } from '../shared/api.js';
+import { LIFECYCLE_EVENTS, type LifecycleEvent, NEED_KINDS, type NeedKind } from '../shared/lifecycle.js';
 import { compileRule, type CompiledRule, MAX_REFERENCE_RULES, type ReferenceRule } from '../shared/references.js';
 
 export const CONFIG_NAME = 'nessa-docs.yaml';
@@ -44,9 +45,25 @@ export interface ProjectConfig {
   /** Repository-relative folders whose Markdown files a pill may show in its peek. */
   readonly notes: readonly string[];
   readonly requireSourceRevision: boolean;
+  readonly work: WorkConfig;
 }
 
-export const EMPTY_CONFIG: ProjectConfig = { present: false, cards: BUILT_IN_CARDS, references: [], notes: [], requireSourceRevision: false };
+/** How a project tracks work (the `work` section). States and events are fixed by the lifecycle; a project only adds to them. */
+export interface WorkConfig {
+  /** Names a record's `by` may use for a person's move (accept, answer). */
+  readonly people: readonly string[];
+  /** After this long with no new record, open work is shown as quiet. */
+  readonly quietAfterMs: number;
+  /** Extra requirements per event, on top of the lifecycle's own. */
+  readonly require: Readonly<Partial<Record<LifecycleEvent, readonly NeedKind[]>>>;
+}
+
+/** The pattern a record's `by` follows: an agent or person name. */
+export const WORKER_NAME = /^[a-z0-9][a-z0-9._-]{0,39}$/;
+export const DEFAULT_QUIET_AFTER_MS = 2 * 60 * 60 * 1000;
+export const EMPTY_WORK_CONFIG: WorkConfig = { people: [], quietAfterMs: DEFAULT_QUIET_AFTER_MS, require: {} };
+
+export const EMPTY_CONFIG: ProjectConfig = { present: false, cards: BUILT_IN_CARDS, references: [], notes: [], requireSourceRevision: false, work: EMPTY_WORK_CONFIG };
 
 export interface ConfigProblem {
   readonly message: string;
@@ -58,7 +75,7 @@ export interface ConfigOutcome {
 }
 
 const NAME = /^[a-z][a-z0-9-]{0,39}$/;
-const TOP_LEVEL = new Set(['version', 'cards', 'references', 'notes', 'authoring']);
+const TOP_LEVEL = new Set(['version', 'cards', 'references', 'notes', 'authoring', 'work']);
 
 /** A repository-relative path or path template: no leading slash, no `..`, no backslash. */
 function relativePath(value: string): boolean {
@@ -170,7 +187,46 @@ export function parseProjectConfig(text: string): ConfigOutcome {
     }
   }
 
-  return { config: { present: true, cards, references, notes, requireSourceRevision }, problems };
+  const work = data.work === undefined ? EMPTY_WORK_CONFIG : readWorkConfig(data.work, problem);
+
+  return { config: { present: true, cards, references, notes, requireSourceRevision, work }, problems };
+}
+
+const DURATION = /^(\d{1,4})(m|h|d)$/;
+const DURATION_MS = { m: 60_000, h: 3_600_000, d: 86_400_000 } as const;
+
+function readWorkConfig(raw: unknown, problem: (message: string) => void): WorkConfig {
+  if (!isRecord(raw)) {
+    problem('work must be a mapping with people, quietAfter and require');
+    return EMPTY_WORK_CONFIG;
+  }
+  let people: string[] = [];
+  let quietAfterMs = DEFAULT_QUIET_AFTER_MS;
+  const require: Partial<Record<LifecycleEvent, NeedKind[]>> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (key === 'people') {
+      if (!Array.isArray(value) || !value.every((name) => typeof name === 'string' && WORKER_NAME.test(name))) {
+        problem('work.people must be a list of names in lowercase letters, digits, ".", "_" and "-", such as [saurav]');
+      } else people = [...new Set(value as string[])];
+    } else if (key === 'quietAfter') {
+      const match = typeof value === 'string' ? DURATION.exec(value) : null;
+      if (!match || Number(match[1]) === 0) problem('work.quietAfter must be a duration such as 30m, 2h or 1d');
+      else quietAfterMs = Number(match[1]) * DURATION_MS[match[2] as keyof typeof DURATION_MS];
+    } else if (key === 'require') {
+      if (!isRecord(value)) {
+        problem('work.require must map an event to the extra things it needs, such as { merge: [check] }');
+        continue;
+      }
+      for (const [event, needs] of Object.entries(value)) {
+        if (!(LIFECYCLE_EVENTS as readonly string[]).includes(event)) {
+          problem(`work.require: "${event}" is not a lifecycle event (${LIFECYCLE_EVENTS.join(', ')}); a project adds requirements, never events`);
+        } else if (!Array.isArray(needs) || !needs.every((need) => (NEED_KINDS as readonly string[]).includes(need))) {
+          problem(`work.require.${event} must list needs from ${NEED_KINDS.join(', ')}`);
+        } else require[event as LifecycleEvent] = [...new Set(needs as NeedKind[])];
+      }
+    } else problem(`work: "${key}" is not a work setting (people, quietAfter, require)`);
+  }
+  return { people, quietAfterMs, require };
 }
 
 function openTarget(raw: unknown): OpenTarget | string {

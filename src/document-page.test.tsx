@@ -35,6 +35,7 @@ function page(id: string, title: string, version = 'catalog'): DocumentResponse 
     referenceRules: [],
     references: {},
     cards: {},
+    work: null,
   };
 }
 

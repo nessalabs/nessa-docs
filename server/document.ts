@@ -30,7 +30,7 @@ const REQUIRED_FIELDS = [
   'diagramLinks',
 ] as const;
 /** Optional details default empty; an absent source revision is unknown. */
-const OPTIONAL_FIELDS = ['diagramDetails', 'sourceRevision', 'model', 'modelCheck'] as const;
+const OPTIONAL_FIELDS = ['diagramDetails', 'sourceRevision', 'model', 'modelCheck', 'work'] as const;
 const COMMIT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const MODEL_SPEC = /^tla(?:\/[A-Za-z0-9_-]+)*\/[A-Za-z0-9_-]+\.tla$/;
 const MODEL_CONFIG = /^tla(?:\/[A-Za-z0-9_-]+)*\/[A-Za-z0-9_-]+\.cfg$/;
@@ -43,6 +43,19 @@ const DIGEST = /^[0-9a-f]{64}$/;
 export type DetailSelector =
   | { readonly kind: 'node'; readonly node: string }
   | { readonly kind: 'edge'; readonly from: string; readonly to: string; readonly label: string };
+
+/** One task in a page's `work` block: the plan, reviewed like any doc change. */
+export interface AuthoredTask {
+  readonly id: string;
+  readonly title: string;
+  /** The chart element this task makes real. */
+  readonly anchor: { readonly diagram: number; readonly selector: DetailSelector };
+  /** Tasks on the same page that should land first. */
+  readonly dependsOn: readonly string[];
+}
+
+/** Bounds on a `work` block. */
+export const WORK_LIMITS = { tasks: 100, title: 200 } as const;
 
 /** One `diagramDetails` entry, well-formed but not yet checked against the body and its charts. */
 export interface AuthoredDiagramDetail {
@@ -66,6 +79,8 @@ export interface ParsedDocument {
   readonly diagramDetails: readonly AuthoredDiagramDetail[];
   readonly model?: ModelLink;
   readonly modelCheck?: ModelCheckRecord;
+  /** The tasks this page plans; empty when the page has no `work` block. */
+  readonly work: readonly AuthoredTask[];
   readonly body: string;
 }
 
@@ -89,12 +104,16 @@ export function isDocumentId(value: unknown): value is string {
   return typeof value === 'string' && value.length <= MAX_ID_LENGTH && DOCUMENT_ID.test(value);
 }
 
-export function parseDocumentFile(text: string): ParseOutcome {
+export type FrontmatterOutcome =
+  | { readonly kind: 'read'; readonly fields: Record<string, unknown>; readonly body: string }
+  | { readonly kind: 'rejected'; readonly problems: readonly FileProblem[] };
+
+/** A file's YAML frontmatter as plain data (core schema, no tags, no aliases), and the Markdown after it. */
+export function readFrontmatter(text: string): FrontmatterOutcome {
   const match = FRONTMATTER.exec(text);
   if (!match) {
     return {
       kind: 'rejected',
-      declaredId: null,
       problems: [
         {
           code: 'missing-frontmatter',
@@ -114,7 +133,6 @@ export function parseDocumentFile(text: string): ParseOutcome {
   if (yamlProblems.length > 0) {
     return {
       kind: 'rejected',
-      declaredId: null,
       problems: yamlProblems.map((error) => ({
         code: 'malformed-yaml',
         message: `frontmatter is not valid YAML: ${error.message.split('\n')[0]}`,
@@ -128,18 +146,22 @@ export function parseDocumentFile(text: string): ParseOutcome {
   } catch (error) {
     return {
       kind: 'rejected',
-      declaredId: null,
       problems: [{ code: 'malformed-yaml', message: `frontmatter could not be read: ${(error as Error).message}` }],
     };
   }
   if (data === null || typeof data !== 'object' || Array.isArray(data)) {
     return {
       kind: 'rejected',
-      declaredId: null,
       problems: [{ code: 'malformed-yaml', message: 'frontmatter must be a YAML mapping of fields' }],
     };
   }
-  return validateFields(data as Record<string, unknown>, text.slice(match[0].length));
+  return { kind: 'read', fields: data as Record<string, unknown>, body: text.slice(match[0].length) };
+}
+
+export function parseDocumentFile(text: string): ParseOutcome {
+  const read = readFrontmatter(text);
+  if (read.kind === 'rejected') return { kind: 'rejected', declaredId: null, problems: read.problems };
+  return validateFields(read.fields, read.body);
 }
 
 function validateFields(fields: Record<string, unknown>, body: string): ParseOutcome {
@@ -238,6 +260,7 @@ function validateFields(fields: Record<string, unknown>, body: string): ParseOut
     }
   }
 
+  const work = Object.hasOwn(fields, 'work') ? readWork(fields.work, invalid) : [];
   const model = Object.hasOwn(fields, 'model') ? readModel(fields.model, invalid) : undefined;
   const modelCheck = Object.hasOwn(fields, 'modelCheck') ? readModelCheck(fields.modelCheck, invalid) : undefined;
   if (modelCheck && !model) invalid('modelCheck', 'present only on a page that also has "model"', modelCheck);
@@ -259,10 +282,63 @@ function validateFields(fields: Record<string, unknown>, body: string): ParseOut
       diagramDetails,
       ...(model ? { model } : {}),
       ...(modelCheck ? { modelCheck } : {}),
+      work,
       body,
     },
     warnings,
   };
+}
+
+const TASK_SHAPE = '{ id, title, anchor: { diagram, node | edge: { from, to, label } }, dependsOn? }';
+
+function readWork(
+  value: unknown,
+  invalid: (field: string, expected: string, found: unknown) => void,
+): AuthoredTask[] {
+  if (!Array.isArray(value)) {
+    invalid('work', `a list of tasks ${TASK_SHAPE}`, value);
+    return [];
+  }
+  if (value.length > WORK_LIMITS.tasks) {
+    invalid('work', `at most ${WORK_LIMITS.tasks} tasks`, `${value.length} tasks`);
+    return [];
+  }
+  const tasks: AuthoredTask[] = [];
+  const seen = new Set<string>();
+  value.forEach((entry, index) => {
+    const field = `work[${index}]`;
+    if (!isPlainMapping(entry)) {
+      invalid(field, `a task ${TASK_SHAPE}`, entry);
+      return;
+    }
+    const extra = Object.keys(entry).filter((key) => !['id', 'title', 'anchor', 'dependsOn'].includes(key));
+    if (extra.length > 0) invalid(field, `a task with only id, title, anchor and dependsOn (found ${extra.join(', ')})`, entry);
+    const { id, title, anchor } = entry;
+    let ok = extra.length === 0;
+    if (!isDocumentId(id)) { invalid(`${field}.id`, 'lowercase kebab-case (a-z, 0-9, single hyphens)', id); ok = false; }
+    else if (seen.has(id)) { invalid(`${field}.id`, 'unique on this page', id); ok = false; }
+    else seen.add(id);
+    if (typeof title !== 'string' || title.trim() === '' || title.length > WORK_LIMITS.title || /[\r\n]/.test(title)) {
+      invalid(`${field}.title`, `one line of 1–${WORK_LIMITS.title} characters`, title);
+      ok = false;
+    }
+    const ANCHOR_SHAPE = 'a mapping { diagram, node } or { diagram, edge: { from, to, label } }';
+    const anchorKeys = isPlainMapping(anchor) ? Object.keys(anchor) : null;
+    const bound = anchorKeys === null || anchorKeys.some((key) => !['diagram', 'node', 'edge'].includes(key))
+      ? ANCHOR_SHAPE
+      : diagramDetail({ ...(anchor as Record<string, unknown>), section: 'anchor' });
+    if (typeof bound === 'string') { invalid(`${field}.anchor`, bound, anchor); ok = false; }
+    const rawDepends = Object.hasOwn(entry, 'dependsOn') ? entry.dependsOn : [];
+    const dependsOn: string[] = [];
+    if (!Array.isArray(rawDepends) || !rawDepends.every((other) => isDocumentId(other))) {
+      invalid(`${field}.dependsOn`, 'a list of task ids on this page', rawDepends);
+      ok = false;
+    } else dependsOn.push(...(rawDepends as string[]));
+    if (ok && typeof bound !== 'string') {
+      tasks.push({ id: id as string, title: (title as string).trim(), anchor: { diagram: bound.diagram, selector: bound.selector }, dependsOn });
+    }
+  });
+  return tasks;
 }
 
 function readModel(
