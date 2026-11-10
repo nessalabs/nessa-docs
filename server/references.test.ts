@@ -92,6 +92,24 @@ describe('reference pills', () => {
     expect(files.reads).not.toContain(`${REPO}/specs/4.md`);
   });
 
+  it('does not follow a symlink in a notes folder to a file elsewhere', async () => {
+    const files = memoryFiles({ ...tree('# Nessa\n\nADR-300.\n'), [`${REPO}/docs/adr/0300-x.md`]: { symlink: `${REPO}/secret.md` }, [`${REPO}/secret.md`]: '# Secret\n' });
+    const catalog = await loadCatalog(files, REPO);
+    const response = (await documentResponse(catalog, 'nessa', files)) as DocumentResponse;
+    // A glob lists regular files only, so the symlink is not a match; nothing outside the notes is read.
+    expect(ref(response, 'adr', 'ADR-300')).toMatchObject({ target: { kind: 'unresolved' }, preview: null });
+    expect(files.reads).not.toContain(`${REPO}/secret.md`);
+  });
+
+  it('names a file reached through a symlink without showing it', async () => {
+    const config = CONFIG.replace("open: { file: 'specs/{n}.md' }", "open: { file: 'docs/adr/{n}.md' }");
+    const files = memoryFiles({ ...tree('# Nessa\n\nSPEC-5.\n'), [`${STATE}/nessa-docs.yaml`]: config, [`${REPO}/docs/adr/5.md`]: { symlink: `${REPO}/secret.md` }, [`${REPO}/secret.md`]: '# Secret\n' });
+    const catalog = await loadCatalog(files, REPO);
+    const response = (await documentResponse(catalog, 'nessa', files)) as DocumentResponse;
+    expect(ref(response, 'spec', 'SPEC-5')).toMatchObject({ target: { kind: 'repo-file', path: 'docs/adr/5.md', exists: true }, preview: null });
+    expect(files.reads).not.toContain(`${REPO}/secret.md`);
+  });
+
   it('skips code and link text', async () => {
     const { response } = await page('# Nessa\n\n`ADR-202`, [ADR-202](https://x.test) and\n\n```\nADR-202\n```\n');
     expect(response.references).toEqual({});

@@ -167,12 +167,16 @@ async function tryTarget(
   if (inspection.kind === 'missing') return { kind: 'next', reason: `no file at ${found}` };
   if (!isInside(inspection.realPath, root)) return { kind: 'final', reason: `${found} resolves outside the repository` };
   const evidence: LinkTarget = { kind: 'repo-file', path: found, fragment: null, exists: true };
-  const inNotes = catalog.config.notes.some((note) => found === note || found.startsWith(`${note}/`));
-  if (!inNotes || !found.toLowerCase().endsWith('.md') || found.startsWith(`${STATE_DIRECTORY}/`)) {
+  // Both the path as written and the file it really is must sit in a notes entry and be Markdown,
+  // so a symlink in a notes folder cannot show a file from elsewhere in the repository.
+  const real = posix.relative(root, inspection.realPath);
+  const readable = (path: string) => catalog.config.notes.some((note) => path === note || path.startsWith(`${note}/`))
+    && path.toLowerCase().endsWith('.md') && !path.startsWith(`${STATE_DIRECTORY}/`);
+  if (inspection.kind !== 'file' || !readable(found) || !readable(real)) {
     if (heading !== null) return { kind: 'next', reason: `${found} is not in a notes folder, so its headings are not read` };
     return { kind: 'resolved', target: evidence, preview: null };
   }
-  const text = await readNote(files, root, absolute, scratch);
+  const text = await readNote(files, root, inspection.realPath, scratch);
   if (text === null) return { kind: 'next', reason: `${found} could not be read` };
   return previewed(found, null, stripFrontmatter(text), heading, evidence, resolveLink, scratch);
 }
@@ -254,7 +258,7 @@ function readNote(files: RepositoryFiles, root: string, absolute: string, scratc
   let pending = scratch.notes.get(absolute);
   if (!pending) {
     pending = (async () => {
-      // The file's own folder is the read boundary: the caller already checked the path is inside a notes entry.
+      // The file's own folder is the read boundary: the caller already checked its real path is inside a notes entry.
       const boundary = await files.inspect(posix.dirname(absolute));
       if (boundary.kind !== 'directory' || !isInside(boundary.realPath, root)) return null;
       const read = await files.readText(absolute, NOTE_MAX_BYTES, boundary.realPath);
