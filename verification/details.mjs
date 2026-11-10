@@ -54,7 +54,10 @@ function inspectorFacts(page) {
       key: dialog?.querySelector('.inspector-frame')?.getAttribute('data-detail-key') ?? null,
       title: dialog?.querySelector('.inspector-title')?.textContent.trim() ?? null,
       kind: dialog?.querySelector('.inspector-kind')?.textContent.trim() ?? null,
-      element: dialog?.querySelector('[data-testid="inspector-element"]')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+      // The relation and authored label are now separate rows; the type Badge
+      // is checked through `kind`, not included in the authored edge text.
+      element: [dialog?.querySelector('.inspector-relation') ?? dialog?.querySelector('[data-testid="inspector-element"] > code'),
+        dialog?.querySelector('.inspector-label')].filter(Boolean).map(e => e.textContent).join(' ').replace(/\s+/g, ' ').trim() || null,
       text: body?.innerText ?? '',
       shown: body?.getAttribute('data-shown') ?? null,
       showFull: Boolean(dialog?.querySelector('button[data-action="show-full"]')),
