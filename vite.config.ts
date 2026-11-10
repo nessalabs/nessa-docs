@@ -24,5 +24,5 @@ export default defineConfig({
     host: '127.0.0.1', port: 5173, strictPort: true,
     proxy: { '/api': { target, changeOrigin: true } },
   },
-  test: { include: ['server/**/*.test.ts', 'src/**/*.test.ts', 'src/**/*.test.tsx', 'scripts/**/*.test.ts'], environment: 'node' },
+  test: { include: ['server/**/*.test.ts', 'shared/**/*.test.ts', 'src/**/*.test.ts', 'src/**/*.test.tsx', 'scripts/**/*.test.ts'], environment: 'node' },
 });

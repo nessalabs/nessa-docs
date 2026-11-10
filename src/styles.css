@@ -1995,3 +1995,159 @@ figure {
 .project-folder-input input { flex: 1; }
 .open-project form .project-folder-input button { flex: none; }
 .picker-hint { font-size: var(--text-small); line-height: 1.5; }
+
+/* ——— Diagram cards (a fence's card=..., src/diagram.tsx) ——— */
+
+.diagram-head-start {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.card-kind {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--rim);
+  color: var(--muted);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.card-kind svg {
+  width: 12px;
+  height: 12px;
+}
+.card-title {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--text-ui);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* State roles: one meaning per colour on every page (shared/api.ts STATE_ROLES). */
+:root {
+  --role-start: color-mix(in oklab, var(--foreground) 55%, transparent);
+  --role-working: oklch(0.6 0.13 252);
+  --role-waiting: oklch(0.68 0.13 78);
+  --role-done: oklch(0.6 0.13 150);
+  --role-refused: oklch(0.58 0.17 28);
+  --role-uncertain: oklch(0.6 0.12 305);
+  --role-ended: color-mix(in oklab, var(--foreground) 35%, transparent);
+}
+.dark {
+  --role-working: oklch(0.72 0.11 252);
+  --role-waiting: oklch(0.8 0.12 80);
+  --role-done: oklch(0.74 0.12 150);
+  --role-refused: oklch(0.72 0.14 28);
+  --role-uncertain: oklch(0.74 0.1 305);
+}
+.diagram-svg .node.start :is(rect, path, polygon, circle) { --role: var(--role-start); }
+.diagram-svg .node.working :is(rect, path, polygon, circle) { --role: var(--role-working); }
+.diagram-svg .node.waiting :is(rect, path, polygon, circle) { --role: var(--role-waiting); }
+.diagram-svg .node.done :is(rect, path, polygon, circle) { --role: var(--role-done); }
+.diagram-svg .node.refused :is(rect, path, polygon, circle) { --role: var(--role-refused); }
+.diagram-svg .node.uncertain :is(rect, path, polygon, circle) { --role: var(--role-uncertain); }
+.diagram-svg .node.ended :is(rect, path, polygon, circle) { --role: var(--role-ended); }
+.diagram-svg .node:is(.start, .working, .waiting, .done, .refused, .uncertain, .ended) :is(rect, path, polygon, circle) {
+  stroke: var(--role) !important;
+  stroke-width: 1.5px !important;
+  fill: color-mix(in oklab, var(--role) 14%, var(--diagram-node)) !important;
+}
+.diagram-svg .node.refused :is(rect, path, polygon, circle) {
+  stroke-width: 2px !important;
+}
+.diagram-svg .node.uncertain :is(rect, path, polygon, circle) {
+  stroke-dasharray: 4 3;
+}
+.role-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 8px 14px 10px;
+  border-top: 1px solid var(--hairline);
+  list-style: none;
+  color: var(--muted);
+  font-size: var(--text-caption);
+}
+.role-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.role-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--role) 22%, var(--diagram-node));
+  box-shadow: inset 0 0 0 1.5px var(--role);
+}
+.role-legend [data-role='start'] { --role: var(--role-start); }
+.role-legend [data-role='working'] { --role: var(--role-working); }
+.role-legend [data-role='waiting'] { --role: var(--role-waiting); }
+.role-legend [data-role='done'] { --role: var(--role-done); }
+.role-legend [data-role='refused'] { --role: var(--role-refused); }
+.role-legend [data-role='uncertain'] { --role: var(--role-uncertain); }
+.role-legend [data-role='ended'] { --role: var(--role-ended); }
+
+/* A handoff card: the actors read as a header row. */
+.diagram[data-card-look='handoff'] .diagram-svg .actor {
+  rx: 8px;
+}
+
+/* ——— Reference pills (shared/references.ts, src/markdown.tsx) ——— */
+
+.ref-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 1.45em;
+  margin: 0 1px;
+  padding: 0 0.45em;
+  border: 0;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--link) 11%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--link) 24%, transparent);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.86em;
+  font-weight: 550;
+  line-height: 1;
+  text-decoration: none;
+  vertical-align: 0.06em;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ref-pill:hover {
+  background: color-mix(in oklab, var(--link) 18%, transparent);
+}
+.ref-pill:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.ref-pill[data-ref-state='evidence'] {
+  cursor: default;
+}
+.ref-pill[data-ref-state='unresolved'] {
+  background: none;
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--error) 40%, transparent);
+  color: var(--muted);
+  cursor: help;
+}
+.peek-truncated {
+  color: var(--muted);
+  font-size: var(--text-small);
+}

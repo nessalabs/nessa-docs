@@ -4,10 +4,10 @@
 
 import { Fragment, type ReactNode } from 'react';
 import type { Token, Tokens } from 'marked';
-import type { LinkTarget } from '../shared/api';
+import type { LinkTarget, ReferenceRuleView, ResolvedReference } from '../shared/api';
 import { AppLink, documentPath, navigate } from './router';
-import { decodeEntities, markdownDiagrams, plainText } from '../shared/markdown';
-import { slugify } from './text';
+import { decodeEntities, diagramCard, headingSlugs, isMermaid, markdownDiagrams, plainText } from '../shared/markdown';
+import { compileRules, type CompiledRule, referenceKey, splitReferences } from '../shared/references';
 
 export interface Heading {
   readonly depth: number;
@@ -15,35 +15,57 @@ export interface Heading {
   readonly slug: string;
 }
 
+/** The card a Mermaid fence names (`card=handoff title="..."`). */
+export interface FenceCard {
+  readonly card: string | null;
+  readonly title: string | null;
+}
+
 /** Draws Mermaid block `index` (counted from 0 in the tokens given); the caller decides what a chart is there. */
-export type DiagramRenderer = (index: number, source: string) => ReactNode;
+export type DiagramRenderer = (index: number, source: string, card: FenceCard) => ReactNode;
+
+/** The page's reference pills: how to split text, and what each piece resolved to (server/references.ts). */
+export interface PageReferences {
+  readonly rules: readonly ReferenceRuleView[];
+  readonly resolved: Readonly<Record<string, ResolvedReference>>;
+  /** A pill with a preview was chosen; the page shows the peek. */
+  readonly onPeek?: (reference: ResolvedReference, from: HTMLElement) => void;
+}
 
 interface Context {
   readonly links: Readonly<Record<string, LinkTarget>>;
   readonly slugs: Map<Token, string>;
   readonly diagram: DiagramRenderer;
   diagramIndex: number;
+  readonly rules: readonly CompiledRule[];
+  readonly references: PageReferences | null;
+  /** Inside a link's text: no pills (a link is already a link). */
+  readonly inLink: boolean;
+}
+
+// Compiled once per distinct rule list: the response object changes on every load, the rules rarely do.
+const compiled = new Map<string, readonly CompiledRule[]>();
+function rulesFor(rules: readonly ReferenceRuleView[] | undefined): readonly CompiledRule[] {
+  if (!rules || rules.length === 0) return [];
+  const key = JSON.stringify(rules);
+  let found = compiled.get(key);
+  if (!found) {
+    found = compileRules(rules);
+    if (compiled.size > 16) compiled.clear();
+    compiled.set(key, found);
+  }
+  return found;
 }
 
 /** Headings in document order with their anchors; one slug per heading token. */
 export function collectHeadings(tokens: readonly Token[]): { headings: Heading[]; slugs: Map<Token, string> } {
-  const seen = new Map<string, number>();
-  const slugs = new Map<Token, string>();
+  // One anchor rule for both sides (shared/markdown.ts headingSlugs), so a server-made #fragment lands here.
+  const slugs = headingSlugs(tokens);
   const headings: Heading[] = [];
-  const visit = (list: readonly Token[]) => {
-    for (const token of list) {
-      if (token.type === 'heading') {
-        const heading = token as Tokens.Heading;
-        const text = plainText(heading.tokens);
-        const slug = slugify(text, seen);
-        slugs.set(token, slug);
-        headings.push({ depth: heading.depth, text, slug });
-      } else if (token.type === 'blockquote') {
-        visit((token as Tokens.Blockquote).tokens);
-      }
-    }
-  };
-  visit(tokens);
+  for (const [token, slug] of slugs) {
+    const heading = token as Tokens.Heading;
+    headings.push({ depth: heading.depth, text: plainText(heading.tokens), slug });
+  }
   return { headings, slugs };
 }
 
@@ -51,13 +73,15 @@ export interface DiagramEntry {
   readonly source: string;
   /** The heading the diagram sits under, if any: its caption and its section in the Details view. */
   readonly section: Heading | null;
+  readonly card: string | null;
+  readonly title: string | null;
 }
 
 /** Every Mermaid block in document order (shared/markdown.ts), with the section it belongs to. */
 export function collectDiagrams(tokens: readonly Token[], slugs: Map<Token, string>): DiagramEntry[] {
-  return markdownDiagrams(tokens).map(({ source, heading }) => {
+  return markdownDiagrams(tokens).map(({ source, heading, card, title }) => {
     const slug = heading ? slugs.get(heading) : undefined;
-    return { source, section: heading && slug ? { depth: heading.depth, text: plainText(heading.tokens), slug } : null };
+    return { source, card, title, section: heading && slug ? { depth: heading.depth, text: plainText(heading.tokens), slug } : null };
   });
 }
 
@@ -66,9 +90,14 @@ export function MarkdownBody(props: {
   slugs: Map<Token, string>;
   links: Readonly<Record<string, LinkTarget>>;
   diagram: DiagramRenderer;
+  references?: PageReferences | null;
   className?: string;
 }) {
-  const context: Context = { links: props.links, slugs: props.slugs, diagram: props.diagram, diagramIndex: 0 };
+  const references = props.references ?? null;
+  const context: Context = {
+    links: props.links, slugs: props.slugs, diagram: props.diagram, diagramIndex: 0,
+    rules: rulesFor(references?.rules), references, inLink: false,
+  };
   return <div className={props.className ?? 'prose'}>{blocks(props.tokens, context)}</div>;
 }
 
@@ -108,12 +137,12 @@ function block(token: Token, context: Context): ReactNode {
       return <p>{inline((token as Tokens.Paragraph).tokens, context)}</p>;
     case 'text': {
       const text = token as Tokens.Text;
-      return text.tokens ? inline(text.tokens, context) : decodeEntities(text.text);
+      return text.tokens && text.tokens.length > 0 ? inline(text.tokens, context) : plain(decodeEntities(text.text), context);
     }
     case 'code': {
       const code = token as Tokens.Code;
-      if (code.lang?.trim().toLowerCase() === 'mermaid') {
-        return context.diagram(context.diagramIndex++, code.text);
+      if (isMermaid(token)) {
+        return context.diagram(context.diagramIndex++, code.text, diagramCard(code));
       }
       return (
         <pre className="code-block" data-lang={code.lang || undefined}>
@@ -184,7 +213,7 @@ function inlineToken(token: Token, context: Context): ReactNode {
   switch (token.type) {
     case 'text': {
       const text = token as Tokens.Text;
-      return text.tokens && text.tokens.length > 0 ? inline(text.tokens, context) : decodeEntities(text.text);
+      return text.tokens && text.tokens.length > 0 ? inline(text.tokens, context) : plain(decodeEntities(text.text), context);
     }
     case 'escape':
       return token.raw.slice(1);
@@ -204,7 +233,7 @@ function inlineToken(token: Token, context: Context): ReactNode {
       const link = token as Tokens.Link;
       return (
         <ResolvedLink href={link.href} links={context.links}>
-          {inline(link.tokens, context)}
+          {inline(link.tokens, context.inLink ? context : { ...context, inLink: true })}
         </ResolvedLink>
       );
     }
@@ -219,6 +248,87 @@ function inlineToken(token: Token, context: Context): ReactNode {
     default:
       return 'tokens' in token && Array.isArray(token.tokens) ? inline(token.tokens, context) : token.raw;
   }
+}
+
+/**
+ * A run of text, with its references drawn as pills. The split is
+ * shared/references.ts splitReferences, the same one the server resolved
+ * (shared/markdown.ts forEachReferenceText visits exactly these runs).
+ */
+function plain(text: string, context: Context): ReactNode {
+  if (context.rules.length === 0 || context.inLink || context.references === null) return text;
+  const pieces = splitReferences(text, context.rules);
+  if (pieces.length === 1 && typeof pieces[0] === 'string') return text;
+  const resolved = context.references.resolved;
+  return pieces.map((piece, index) => {
+    if (typeof piece === 'string') return piece;
+    const key = referenceKey(piece.rule, piece.text);
+    const reference = Object.hasOwn(resolved, key) ? (resolved[key] as ResolvedReference) : null;
+    return <ReferencePill key={index} text={piece.text} reference={reference} onPeek={context.references?.onPeek} />;
+  });
+}
+
+export function ReferencePill({
+  text,
+  reference,
+  onPeek,
+}: {
+  text: string;
+  reference: ResolvedReference | null;
+  onPeek?: (reference: ResolvedReference, from: HTMLElement) => void;
+}) {
+  if (reference === null) {
+    return (
+      <span className="ref-pill" data-ref-state="unresolved" title="The server did not resolve this reference">
+        {text}
+      </span>
+    );
+  }
+  const { target, preview, label, rule } = reference;
+  if (target.kind === 'unresolved') {
+    return (
+      <span className="ref-pill" data-ref-rule={rule} data-ref-state="unresolved" title={`Unresolved ${rule} reference: ${target.reason}`}>
+        {label}
+      </span>
+    );
+  }
+  if (preview && onPeek) {
+    return (
+      <button
+        type="button"
+        className="ref-pill"
+        data-ref-rule={rule}
+        data-ref-state="preview"
+        aria-haspopup="dialog"
+        title={`${preview.title} (${preview.file})`}
+        onClick={(event) => onPeek(reference, event.currentTarget)}
+        data-action="peek-reference"
+      >
+        {label}
+      </button>
+    );
+  }
+  if (target.kind === 'document') {
+    return (
+      <AppLink to={documentPath(target.id, target.fragment)} className="ref-pill" data-ref-rule={rule} data-ref-state="link">
+        {label}
+      </AppLink>
+    );
+  }
+  if (target.kind === 'external') {
+    return (
+      <a href={target.url} target="_blank" rel="noopener noreferrer" className="ref-pill" data-ref-rule={rule} data-ref-state="link" title={target.url}>
+        {label}
+        <span className="visually-hidden"> (opens in a new tab)</span>
+      </a>
+    );
+  }
+  const where = target.kind === 'repo-file' || target.kind === 'outside-repo' ? target.path : '';
+  return (
+    <span className="ref-pill" data-ref-rule={rule} data-ref-state="evidence" title={where}>
+      {label}
+    </span>
+  );
 }
 
 export function ResolvedLink({

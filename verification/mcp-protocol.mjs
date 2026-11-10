@@ -20,7 +20,7 @@ export async function verifyProtocol() {
     const client = await connectDocs(ui);
     try {
       const { tools } = await client.listTools();
-      assert.deepEqual(tools.map((tool) => tool.name).sort(), ['check_model', 'read_docs', 'replace_docs', 'show_docs']);
+      assert.deepEqual(tools.map((tool) => tool.name).sort(), ['check_model', 'read_config', 'read_docs', 'replace_docs', 'show_docs']);
       const checker = await client.callTool({ name: 'check_model', arguments: { action: 'status' } });
       assert.equal(checker.isError, undefined, JSON.stringify(checker));
       assert.ok(['not-installed', 'ready', 'failed', 'downloading'].includes(checker.structuredContent.state));

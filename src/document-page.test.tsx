@@ -32,6 +32,9 @@ function page(id: string, title: string, version = 'catalog'): DocumentResponse 
     breadcrumbs: [{ id, title }],
     children: [],
     issues: [],
+    referenceRules: [],
+    references: {},
+    cards: {},
   };
 }
 

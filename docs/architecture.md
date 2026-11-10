@@ -13,6 +13,9 @@ program, and pages without a model skip it.
 | `skills/nessa-docs/` | Agent instructions and the repository document format |
 | `shared/` | Markdown structure and API data types shared by reader and server |
 | `server/document.ts`, `catalog.ts`, `diagram-details.ts` | Metadata, hierarchy and target validation |
+| `server/project-config.ts` | The optional `docs/state/nessa-docs.yaml`: card styles, reference patterns, note folders, authoring rules |
+| `server/references.ts` | Where each reference pill on a page points, and the preview its peek shows |
+| `shared/references.ts`, `shared/cards.ts` | How text is split into pills and which card a chart gets; the server and the browser both call these |
 | `server/files.ts` | Local filesystem adapter for the injected repository-files port; checks reads against the catalog's accepted documentation boundary |
 | `server/path-containment.ts` | The path-containment rule used by the catalog, file reader and link resolver |
 | `server/project-opening/` | Validate chosen folders, retain opened project contexts, supply the local folder chooser, and compose the headless checker |
@@ -53,6 +56,12 @@ The format reference inside the skill is the documentation owner of metadata.
 The parser is its implementation. Other guides link the reference instead of
 declaring another schema. `parent` metadata owns hierarchy; a separate manifest
 would create another navigation authority.
+
+A reference pill is resolved by the server, like a link. The browser splits
+text with the same function the server used and looks each pill up by its
+rule and text; it never builds a target. A pill may show a Markdown file outside
+`docs/state` only when the project config lists that file or its folder under
+`notes`; every other repository path is still only checked for existence.
 
 Mermaid rendering runs serially because the library keeps global state.
 The canvas handles navigation and presentation after SVG rendering. Markdown

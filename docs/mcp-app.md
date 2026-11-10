@@ -90,6 +90,12 @@ is not a pass. The model checks the design, not the code. Include linked
 `.tla` and `.cfg` files in the bundle when checking by page path. See
 [rule checking](model-check.md).
 
+`read_config` is read-only and model-visible. It returns the bundle's
+`docs/state/nessa-docs.yaml` as parsed data with the built-in cards and state
+roles, or checks a draft passed as `text` without saving it. A bundle may hold
+that one YAML file as `{ path, text }`; an invalid config makes `replace_docs`
+refuse the bundle.
+
 `replace_docs` is model-visible and mutating/destructive (whole-bundle
 replacement). `read_docs` is read-only, model/app-visible. `show_docs` is
 read-only and model-visible. `check_model` is model- and app-visible. It can

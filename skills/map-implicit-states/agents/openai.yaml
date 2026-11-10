@@ -1,0 +1,4 @@
+interface:
+  display_name: "Map implicit states"
+  short_description: "Find states the code has but never names, and chart them"
+  default_prompt: "Use $map-implicit-states to find the implicit states in this module and write them up as Nessa Docs statecharts."

@@ -8,15 +8,17 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Token, Tokens } from 'marked';
 import { ChevronRight, ListTree } from 'lucide-react';
-import type { CatalogIssue, DocumentResponse, DocumentSummary, LinkTarget, UnknownDocumentResponse } from '../shared/api';
+import type { CatalogIssue, DocumentResponse, DocumentSummary, LinkTarget, ResolvedReference, UnknownDocumentResponse } from '../shared/api';
 import { useProjectReads } from './project-opening/project-context';
 import { groupByKind, KIND_NAME, KIND_SINGULAR } from './kinds';
 import { lexMarkdown, markdownSections } from '../shared/markdown';
 import { useAppearance, type Appearance } from './appearance';
 import { DetailInspector } from './detail-inspector';
+import { ReferencePeek } from './reference-peek';
+import { cardFor, drawnSource } from '../shared/cards';
 import { Diagram, diagramReady, warmDiagram, type DiagramDetailEntry } from './diagram';
 import { useDiagramDetail } from './diagram-detail';
-import { collectDiagrams, collectHeadings, type Heading, MarkdownBody, TargetLink } from './markdown';
+import { collectDiagrams, collectHeadings, type FenceCard, type Heading, MarkdownBody, type PageReferences, TargetLink } from './markdown';
 import { AppLink, documentPath, navigate, scrollToHash, useSearchAndHash } from './router';
 import { Titlebar } from './shell';
 import { plainText } from '../shared/markdown';
@@ -60,13 +62,14 @@ function documentTokens(body: string, title: string): Token[] {
   return all;
 }
 
-function diagramSources(body: string, title: string): readonly string[] {
-  const tokens = documentTokens(body, title);
-  return collectDiagrams(tokens, collectHeadings(tokens).slugs).map((diagram) => diagram.source);
+/** What each chart draws (a card may add to its source, shared/cards.ts), so warming renders the same text. */
+function diagramSources(response: DocumentResponse): readonly string[] {
+  const tokens = documentTokens(response.body, response.document.title);
+  return collectDiagrams(tokens, collectHeadings(tokens).slugs).map((diagram) => drawnSource(cardFor(diagram.card, diagram.source, response.cards), diagram.source));
 }
 
 function pageReady(response: DocumentResponse, appearance: Appearance): boolean {
-  return diagramSources(response.body, response.document.title).every((source) => diagramReady(source, appearance));
+  return diagramSources(response).every((source) => diagramReady(source, appearance));
 }
 
 export function DocumentPage(props: { id: string; catalogVersion: string; onStaleCatalog: () => void; focusOnLoad: boolean }) {
@@ -88,7 +91,7 @@ export function DocumentPage(props: { id: string; catalogVersion: string; onStal
     const deliver = async (response: DocumentResponse) => {
       rememberResponse(response);
       const theme = appearanceNow.current;
-      for (const source of diagramSources(response.body, response.document.title)) {
+      for (const source of diagramSources(response)) {
         if (controller.signal.aborted) return;
         await warmDiagram(source, theme);
       }
@@ -293,9 +296,32 @@ function DocumentView({ response, focusOnLoad, onChecked, pending }: { response:
     setSelected(null);
   }, []);
   const onExpandedChange = useCallback((expanded: boolean) => setExpandedCharts((n) => n + (expanded ? 1 : -1)), []);
+  // A reference pill's peek: one at a time; opening it closes the details inspector, and the reverse.
+  const [peek, setPeek] = useState<ResolvedReference | null>(null);
+  const peekFrom = useRef<HTMLElement | null>(null);
+  const references = useMemo<PageReferences>(() => ({
+    rules: response.referenceRules,
+    resolved: response.references,
+    onPeek: (reference, from) => {
+      invoker.current = null;
+      setSelected(null);
+      peekFrom.current = from;
+      setPeek(reference);
+    },
+  }), [response.referenceRules, response.references]);
+  const closePeek = useCallback(() => {
+    setPeek(null);
+    const from = peekFrom.current;
+    peekFrom.current = null;
+    if (from?.isConnected) from.focus({ preventScroll: true });
+  }, []);
+  useEffect(() => {
+    if (selected !== null) setPeek(null);
+  }, [selected]);
   useEffect(() => {
     invoker.current = null;
     setSelected(null);
+    setPeek(null);
   }, [view, appearance, location]);
   // After the inspector has closed (its own layout effect runs first), focus returns to the
   // element it came from, or moves to where a followed link led (the #section, else the title).
@@ -324,11 +350,16 @@ function DocumentView({ response, focusOnLoad, onChecked, pending }: { response:
   }, [response.links, document.id]);
   const selection =
     selected !== null && response.diagramDetails[selected] ? { key: selected, detail: response.diagramDetails[selected] } : null;
-  const chart = (index: number, source: string, canvas: boolean, caption?: Heading | null) => (
+  const chart = (index: number, authored: string, canvas: boolean, caption: Heading | null | undefined, fence: FenceCard) => {
+    const card = cardFor(fence.card, authored, response.cards);
+    const source = drawnSource(card, authored);
+    return (
     <Diagram
       key={index}
       index={index}
       source={source}
+      card={card}
+      cardTitle={fence.title}
       links={response.diagramLinks}
       canvas={canvas}
       caption={caption ? { text: caption.text, detailsHref: detailsHref(caption.slug) } : null}
@@ -340,7 +371,8 @@ function DocumentView({ response, focusOnLoad, onChecked, pending }: { response:
       ruleMarks={ruleMarks}
       onSelectRule={setRuleNode}
     />
-  );
+    );
+  };
 
   useEffect(() => {
     const element = title.current;
@@ -475,7 +507,7 @@ function DocumentView({ response, focusOnLoad, onChecked, pending }: { response:
 
           {view === 'diagrams' ? (
             <>
-              <div className="diagram-view">{diagrams.map((diagram, index) => chart(index, diagram.source, true, diagram.section))}</div>
+              <div className="diagram-view">{diagrams.map((diagram, index) => chart(index, diagram.source, true, diagram.section, diagram))}</div>
               {childList}
             </>
           ) : (
@@ -485,7 +517,8 @@ function DocumentView({ response, focusOnLoad, onChecked, pending }: { response:
                 tokens={tokens}
                 slugs={slugs}
                 links={response.links}
-                diagram={(index, source) => chart(index, source, false)}
+                references={references}
+                diagram={(index, source, fence) => chart(index, source, false, null, fence)}
               />
               {document.kind === 'system' ? childList : null}
             </>
@@ -564,6 +597,7 @@ function DocumentView({ response, focusOnLoad, onChecked, pending }: { response:
           onFollowLink={followLink}
           onPlaced={onPlaced}
         />
+        <ReferencePeek reference={peek} modal={narrow || expandedCharts > 0} onClose={closePeek} />
       </div>
     </>
   );

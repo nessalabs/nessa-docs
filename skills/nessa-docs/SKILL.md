@@ -85,6 +85,14 @@ configuration; say what is remembered, where, and for how long. Mermaid supports
 only part of this notation. Do not promise resume or persistence from a history
 symbol, or completion or erasure from a final marker alone.
 
+Read the project's `docs/state/nessa-docs.yaml` before choosing a card or
+writing a reference. Name a card on the Mermaid fence (`card=lifecycle`,
+`card=handoff`, `card=map`, or one the project defines) and tag states with the
+fixed roles, as [the format](references/format.md#diagram-cards-and-state-roles)
+describes. Write references in the form the project's patterns expect, such as
+`ADR-202`, so they become clickable; never invent a pattern in prose that the
+config does not define.
+
 Keep accepted work, performed effects, acknowledgements and completed cleanup
 distinct when the code does. Do not force independent lifecycles into one large
 application state. Avoid a box for every function or field. Use
@@ -177,3 +185,9 @@ retrying. Managed generation paths are standalone snapshots with bounded
 retention; read for the latest path before opening. Tools never choose arbitrary
 paths, write into a source project's docs/state or read source files. State which
 content is synthetic/proposed and which source you actually verified.
+
+Call `read_config` before writing pages. It returns the project config, the
+cards and state roles a page may use, and the reference patterns. Include
+`docs/state/nessa-docs.yaml` in the bundle as `{ path, text }` when the project
+has one; a bundle with an invalid config is refused. Pass `text` to
+`read_config` to check a draft config without saving it.

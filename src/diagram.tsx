@@ -2,9 +2,9 @@
 // Mermaid runs with securityLevel "strict"; renders are serialized and a
 // render that finishes after its block unmounted or changed is discarded.
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Maximize2, Minimize2, Minus, Plus } from 'lucide-react';
-import type { Crumb, DiagramDetail, DiagramFamily } from '../shared/api';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeftRight, Maximize2, Minimize2, Minus, Network, Plus, Workflow } from 'lucide-react';
+import { type CardStyle, type Crumb, type DiagramDetail, type DiagramFamily, STATE_ROLES, type StateRole } from '../shared/api';
 import { diagramFits, MERMAID_MAX_TEXT_SIZE } from '../shared/markdown';
 import { type Appearance, useAppearance } from './appearance';
 import { checkBuild, isUnloading, reloadOnceFor } from './build';
@@ -381,10 +381,27 @@ export interface DiagramCaption {
 
 const NO_DETAILS: readonly DiagramDetailEntry[] = [];
 
+const ROLE_NAMES: Readonly<Record<StateRole, string>> = {
+  start: 'Start', working: 'Working', waiting: 'Waiting', done: 'Done', refused: 'Refused', uncertain: 'Uncertain', ended: 'Ended',
+};
+const ROLE_SET = new Set<string>(STATE_ROLES);
+
+/** The state roles a chart tags (`class A,B waiting` or `A:::waiting`), in the fixed role order. */
+export function rolesUsed(source: string): StateRole[] {
+  const used = new Set<string>();
+  for (const match of source.matchAll(/^\s*class\s+\S+\s+([A-Za-z]+)\s*;?\s*$/gm)) if (ROLE_SET.has(match[1] as string)) used.add(match[1] as string);
+  for (const match of source.matchAll(/:::([A-Za-z]+)/g)) if (ROLE_SET.has(match[1] as string)) used.add(match[1] as string);
+  return STATE_ROLES.filter((role) => used.has(role));
+}
+
+const CARD_ICONS = { lifecycle: Workflow, handoff: ArrowLeftRight, map: Network, plain: null } as const;
+
 export function Diagram({
   source,
   links,
   index,
+  card = null,
+  cardTitle = null,
   caption = null,
   canvas = false,
   details = NO_DETAILS,
@@ -399,6 +416,10 @@ export function Diagram({
   source: string;
   links: Readonly<Record<string, Crumb>>;
   index: number;
+  /** The card style the fence named (already checked against the chart by the server; null: today's plain chart). */
+  card?: CardStyle | null;
+  /** The title the fence named. */
+  cardTitle?: string | null;
   caption?: DiagramCaption | null;
   /** In the Diagrams view: the stage is a window-height canvas that scrolls inside. */
   canvas?: boolean;
@@ -421,6 +442,7 @@ export function Diagram({
   const selectRule = useRef(onSelectRule);
   selectRule.current = onSelectRule;
   const appearance = useAppearance();
+  const roles = useMemo(() => rolesUsed(source), [source]);
   const [state, setState] = useState<DiagramState>(() => initialDiagramState(source, appearance));
   const [zoom, setZoom] = useState<Zoom>({ mode: 'readable' });
   const [fitScale, setFitScale] = useState(1);
@@ -843,6 +865,8 @@ export function Diagram({
       id={chartAnchor(index)}
       className="diagram"
       data-diagram-index={index}
+      data-card={card?.name}
+      data-card-look={card?.look}
       data-state={state.kind}
       data-canvas={canvas ? '' : undefined}
       data-expanded={expanded ? '' : undefined}
@@ -851,18 +875,21 @@ export function Diagram({
       aria-label={expanded ? (caption?.text ?? 'Diagram') : undefined}
     >
       <div className="diagram-head">
-        {caption ? (
-          <figcaption className="diagram-caption">
-            <span className="diagram-caption-text" title={caption.text}>
-              {caption.text}
-            </span>
-            <AppLink to={caption.detailsHref} className="diagram-read" data-action="details-section">
-              In Details
-            </AppLink>
-          </figcaption>
-        ) : (
-          <span />
-        )}
+        <div className="diagram-head-start">
+          {card || cardTitle ? <CardHeader card={card} title={cardTitle} /> : null}
+          {caption ? (
+            <figcaption className="diagram-caption">
+              {cardTitle ? null : (
+                <span className="diagram-caption-text" title={caption.text}>
+                  {caption.text}
+                </span>
+              )}
+              <AppLink to={caption.detailsHref} className="diagram-read" data-action="details-section">
+                In Details
+              </AppLink>
+            </figcaption>
+          ) : null}
+        </div>
         {controls}
       </div>
       {state.kind === 'failed' ? (
@@ -898,6 +925,16 @@ export function Diagram({
           <div ref={host} className="diagram-svg" />
         </div>
       )}
+      {roles.length > 0 ? (
+        <ul className="role-legend" aria-label="State roles">
+          {roles.map((role) => (
+            <li key={role} data-role={role}>
+              <span className="role-swatch" aria-hidden="true" />
+              {ROLE_NAMES[role]}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {/* Diagnostic only: a chart that could not be drawn shows what it was given. */}
       {state.kind === 'failed' || state.kind === 'outdated' ? (
         <pre className="diagram-source" aria-label="Mermaid source">
@@ -905,5 +942,21 @@ export function Diagram({
         </pre>
       ) : null}
     </figure>
+  );
+}
+
+/** The card's header: what kind of picture this is, and its title. */
+function CardHeader({ card, title }: { card: CardStyle | null; title: string | null }) {
+  const Icon = card ? CARD_ICONS[card.look] : null;
+  return (
+    <div className="card-head">
+      {card && card.look !== 'plain' ? (
+        <span className="card-kind" data-look={card.look}>
+          {Icon ? <Icon aria-hidden="true" /> : null}
+          {card.label}
+        </span>
+      ) : null}
+      {title ? <span className="card-title">{title}</span> : null}
+    </div>
   );
 }
