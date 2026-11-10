@@ -10,6 +10,32 @@ export interface ReferenceRule {
   readonly match: string;
 }
 
+/**
+ * The page's glossary as it travels to the browser: the terms its glossary.md
+ * files list (server/glossary.ts). The pattern is built from the terms by
+ * glossaryRegex on both sides, so it is never authored and never checked as one.
+ */
+export interface GlossaryRule {
+  readonly name: typeof GLOSSARY_RULE;
+  readonly terms: readonly string[];
+}
+
+/** The name the glossary rule travels under; a project's own reference may not use it. */
+export const GLOSSARY_RULE = 'glossary';
+/**
+ * A term is a word of letters and digits, with + & . / - inside it, and two or
+ * more capitals so an ordinary word never becomes a link: SDK, gRPC, TLA+, I/O.
+ */
+export const GLOSSARY_TERM = /^(?=(?:[^A-Z]*[A-Z]){2})[\p{L}\p{N}](?:[\p{L}\p{N}+&./-]{0,30}[\p{L}\p{N}+])?$/u;
+/** At most this many terms reach one page. */
+export const MAX_GLOSSARY_TERMS = 1000;
+
+/** Matches any of `terms` written exactly, or with a plural `s`: SDK, SDKs. Longest first, so MCP does not cut MCPX. */
+export function glossaryRegex(terms: readonly string[]): RegExp {
+  const choices = [...terms].sort((a, b) => b.length - a.length || (a < b ? -1 : 1)).map((term) => term.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&'));
+  return new RegExp(`(?<term>${choices.join('|')})s?`, 'gu');
+}
+
 /** The longest pattern accepted, in UTF-16 code units. */
 export const MAX_PATTERN_LENGTH = 256;
 /** At most this many patterns per project. */
@@ -123,8 +149,12 @@ export function compileRule(rule: ReferenceRule): RuleCompilation {
 }
 
 /** Compiles every usable pattern; ones that do not compile are left out (the server reports them in Health). */
-export function compileRules(rules: readonly ReferenceRule[]): readonly CompiledRule[] {
+export function compileRules(rules: readonly (ReferenceRule | GlossaryRule)[]): readonly CompiledRule[] {
   return rules.flatMap((rule) => {
+    if ('terms' in rule) {
+      const terms = rule.terms.filter((term) => GLOSSARY_TERM.test(term)).slice(0, MAX_GLOSSARY_TERMS);
+      return terms.length > 0 ? [{ name: GLOSSARY_RULE, regex: glossaryRegex(terms) }] : [];
+    }
     const outcome = compileRule(rule);
     return outcome.kind === 'ok' ? [outcome.rule] : [];
   });

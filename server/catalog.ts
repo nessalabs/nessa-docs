@@ -15,6 +15,7 @@ import { textCache } from '../shared/memo.js';
 import { NO_HISTORY, type SourceHistory } from './source-history.js';
 import { bindAnchors, pageWork, readRecords, replayPage, WORK_DIRECTORY } from './work.js';
 import type { PageWork } from '../shared/api.js';
+import { GLOSSARY_FILE, GlossaryIndex, readGlossary, unlistedAcronyms, unlistedMessage } from './glossary.js';
 import { cardFits, CONFIG_FILE, CONFIG_NAME, EMPTY_CONFIG, MAX_CONFIG_BYTES, parseProjectConfig, type ProjectConfig } from './project-config.js';
 
 export const STATE_DIRECTORY = 'docs/state';
@@ -63,6 +64,8 @@ export interface Catalog {
   readonly issues: readonly CatalogIssue[];
   /** docs/state/nessa-docs.yaml as read, or the defaults when it is absent. */
   readonly config: ProjectConfig;
+  /** Every accepted glossary.md page's entries, by the folder each covers. */
+  readonly glossary: GlossaryIndex;
 }
 
 interface Candidate {
@@ -469,6 +472,24 @@ export async function loadCatalog(
     const parent = candidate.parsed.parent;
     if (parent !== null) children.set(parent, [...(children.get(parent) ?? []), candidate.parsed.id]);
   }
+  // Glossaries: each glossary.md page lists the terms of its folder and below. A page that
+  // writes an acronym none of its glossaries lists is told which glossary should list it.
+  const glossary = new GlossaryIndex();
+  for (const candidate of ordered) {
+    if (posix.basename(candidate.file) !== GLOSSARY_FILE) continue;
+    const read = readGlossary(candidate.parsed.id, candidate.file, candidate.parsed.body);
+    glossary.add(candidate.file, read.entries);
+    for (const problem of read.problems) candidate.warnings.push(issue(candidate.file, 'invalid-glossary-entry', problem.message, candidate.parsed.id, 'warning'));
+  }
+  const configuredRules = config.references.map((reference) => reference.rule);
+  for (const candidate of ordered) {
+    const own = glossary.ruleFor(candidate.file);
+    const nearest = glossary.nearest(candidate.file);
+    if (own === null || nearest === null) continue;
+    const unlisted = unlistedAcronyms(candidate.parsed.body, [...configuredRules, own.rule]);
+    if (unlisted.length > 0) candidate.warnings.push(issue(candidate.file, 'unlisted-acronym', unlistedMessage(unlisted, nearest), candidate.parsed.id, 'warning'));
+  }
+
   // Work: replay each page's records and bind its task anchors.
   // A record that cannot be read is listed on its page too, so the page says it has a problem.
   const candidateById = new Map(accepted.map((candidate) => [candidate.parsed.id, candidate]));
@@ -524,6 +545,7 @@ export async function loadCatalog(
     rejectedFiles: rejected,
     issues,
     config,
+    glossary,
   };
 }
 
@@ -537,6 +559,7 @@ function emptyCatalog(repoRoot: string | null, issues: CatalogIssue[]): Catalog 
     rejectedFiles: new Map(),
     issues,
     config: EMPTY_CONFIG,
+    glossary: new GlossaryIndex(),
   };
 }
 

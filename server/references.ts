@@ -5,9 +5,10 @@
 
 import { posix } from 'node:path';
 import { type Token, walkTokens } from 'marked';
-import type { CatalogIssue, LinkTarget, ReferencePreview, ResolvedReference } from '../shared/api.js';
+import { type CatalogIssue, cutText, type LinkTarget, PREVIEW_TITLE_MAX, type ReferencePreview, type ResolvedReference } from '../shared/api.js';
 import { forEachReferenceText, headingSlugs, lexMarkdown, markdownSections, plainText } from '../shared/markdown.js';
-import { fillTemplate, findReferences, referenceKey, type ReferenceMatch } from '../shared/references.js';
+import { fillTemplate, findReferences, GLOSSARY_RULE, referenceKey, type ReferenceMatch } from '../shared/references.js';
+import { firstParagraph, type GlossaryEntry } from './glossary.js';
 import { type Catalog, STATE_DIRECTORY } from './catalog.js';
 import type { RepositoryFiles } from './files.js';
 import { isInside } from './path-containment.js';
@@ -46,8 +47,11 @@ export async function resolvePageReferences(
   resolveLink: Resolve,
 ): Promise<ReferenceResolution> {
   const configured = catalog.config.references;
-  if (configured.length === 0) return { references: {}, issues: [] };
-  const rules = configured.map((reference) => reference.rule);
+  const glossary = catalog.glossary.pillRuleFor(file);
+  if (configured.length === 0 && glossary === null) return { references: {}, issues: [] };
+  // The glossary comes last, so ADR-12 stays an ADR pill when ADR is also a term.
+  const rules = [...configured.map((reference) => reference.rule), ...(glossary ? [glossary.rule] : [])];
+  const terms = catalog.glossary.forFile(file);
   const byName = new Map(configured.map((reference) => [reference.rule.name, reference]));
 
   // One pass over the page's text runs collects each distinct (rule, text) once.
@@ -64,6 +68,13 @@ export async function resolvePageReferences(
   const issues: CatalogIssue[] = [];
   let count = 0;
   for (const [key, match] of unique) {
+    if (match.rule === GLOSSARY_RULE) {
+      const entry = terms.get(match.groups.term ?? '');
+      references[key] = entry
+        ? { rule: GLOSSARY_RULE, label: match.text, ...(await glossaryEntry(entry, resolveLink, scratch)) }
+        : { rule: GLOSSARY_RULE, label: match.text, target: { kind: 'unresolved', reason: 'no glossary lists this term' }, preview: null };
+      continue;
+    }
     const reference = byName.get(match.rule) as ReferenceConfig;
     const label = fillTemplate(reference.label, match) ?? match.text;
     count += 1;
@@ -82,6 +93,16 @@ export async function resolvePageReferences(
     }
   }
   return { references, issues };
+}
+
+/** A glossary term opens its entry: the glossary page at the term's heading, with the entry as its peek. */
+// Terms are at most MAX_GLOSSARY_TERMS and pills per page at most MAX_REFERENCES_PER_PAGE, so this stays bounded.
+async function glossaryEntry(entry: GlossaryEntry, resolveLink: Resolve, scratch: Scratch): Promise<Omit<ResolvedReference, 'rule' | 'label'>> {
+  // An entry is already in memory, so it does not spend the page's preview budget (MAX_PREVIEWS_PER_PAGE).
+  const target: LinkTarget = { kind: 'document', id: entry.documentId, fragment: entry.fragment || null };
+  const links: Record<string, LinkTarget> = {};
+  for (const href of hrefs(lexMarkdown(entry.body))) links[href] = await resolveLink(href, entry.file);
+  return { target, preview: { title: entry.term, body: entry.body, truncated: false, links, file: entry.file, gist: entry.gist } };
 }
 
 async function resolveOne(
@@ -228,7 +249,9 @@ async function previewed(
   }
   const links: Record<string, LinkTarget> = {};
   for (const href of hrefs(lexMarkdown(text))) links[href] = await resolveLink(href, file);
-  return { kind: 'resolved', target: located, preview: { title: previewTitle, body: text, truncated, links, file } };
+  // The hover text is the first paragraph after the title.
+  const gist = firstParagraph(tokens);
+  return { kind: 'resolved', target: located, preview: { title: cutText(previewTitle, PREVIEW_TITLE_MAX), body: text, truncated, links, file, gist } };
 }
 
 function hrefs(tokens: Token[]): string[] {

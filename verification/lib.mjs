@@ -291,7 +291,7 @@ export async function nodeLinkFacts(page, figures = 'figure.diagram') {
     return {
       svgRoles: svgs.map((svg) => svg.getAttribute('role')),
       linked: linked.length,
-      linkedWithRole: linked.filter((n) => n.getAttribute('tabindex') === '0' && (n.hasAttribute('data-detail-key') ? n.getAttribute('role') === 'button' && /^Details: /.test(n.getAttribute('aria-label') || '') : n.getAttribute('role') === 'link' && /^Open /.test(n.getAttribute('aria-label') || ''))).length,
+      linkedWithRole: linked.filter((n) => n.getAttribute('tabindex') === '0' && (n.hasAttribute('data-detail-key') ? n.getAttribute('role') === 'button' && /^Details: /.test(n.getAttribute('aria-label') || '') : n.getAttribute('role') === 'button' && /^Overview of /.test(n.getAttribute('aria-label') || ''))).length,
       linkedWithMark: linked.filter((n) => n.querySelector(':scope > .diagram-depth-mark, :scope > .diagram-depth-inset')).length,
       insetCues: linked.filter((n) => n.querySelector(':scope > .diagram-depth-inset')).length,
       unlinked: unlinked.length,

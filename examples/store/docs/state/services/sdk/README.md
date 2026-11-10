@@ -17,4 +17,4 @@ flowchart LR
     Caller[Caller] --> Attachment[Attachment]
 ```
 
-Attachment is the flow that can be closed, and then must refuse writes.
+Attachment is the SDK flow that can be closed, and then must refuse writes.

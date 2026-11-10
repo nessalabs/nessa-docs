@@ -2,7 +2,7 @@
 // injected: raw HTML in a document is shown as text (except a bare <br>),
 // and every href goes through the server's resolution table.
 
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, type ReactNode, useId, useState } from 'react';
 import type { Token, Tokens } from 'marked';
 import type { LinkTarget, ReferenceRuleView, ResolvedReference } from '../shared/api';
 import { AppLink, documentPath, navigate } from './router';
@@ -268,6 +268,72 @@ function plain(text: string, context: Context): ReactNode {
   });
 }
 
+/** The hover card's widest size in CSS pixels (styles.css .ref-card max-width 22rem). */
+const HOVER_CARD_WIDTH = 352;
+
+/**
+ * A pill that opens a peek on click and shows the gist (the title and first
+ * paragraph) on hover or keyboard focus. The card is a sibling of the button
+ * and describes it, so the button's name stays the label.
+ */
+function PeekPill({
+  label,
+  rule,
+  reference,
+  onPeek,
+}: {
+  label: string;
+  rule: string;
+  reference: ResolvedReference;
+  onPeek: (reference: ResolvedReference, from: HTMLElement) => void;
+}) {
+  const id = useId();
+  const preview = reference.preview!;
+  const glossary = rule === 'glossary';
+  // Escape hides the card until the pointer or focus comes back. The card starts under the pill and
+  // moves left as far as it must to stay 16 px inside the window.
+  const [hidden, setHidden] = useState(false);
+  const [shift, setShift] = useState(0);
+  const place = (element: Element) => {
+    setHidden(false);
+    const left = element.getBoundingClientRect().left;
+    const width = Math.min(HOVER_CARD_WIDTH, window.innerWidth - 32);
+    setShift(Math.round(Math.max(16 - left, Math.min(0, window.innerWidth - 16 - width - left))));
+  };
+  return (
+    <span
+      className="ref-hover"
+      data-card-hidden={hidden ? '' : undefined}
+      onPointerEnter={(event) => place(event.currentTarget)}
+    >
+      <button
+        type="button"
+        className="ref-pill"
+        data-ref-rule={rule}
+        data-ref-state="preview"
+        aria-haspopup="dialog"
+        aria-describedby={id}
+        onFocus={(event) => place(event.currentTarget)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && !hidden) {
+            event.stopPropagation();
+            setHidden(true);
+          }
+        }}
+        onClick={(event) => onPeek(reference, event.currentTarget)}
+        data-action="peek-reference"
+      >
+        {label}
+      </button>
+      <span id={id} role="tooltip" className="ref-card" style={shift ? { left: shift } : undefined} data-ref-card={glossary ? 'term' : 'page'}>
+        <span className="ref-card-title">{preview.title}</span>
+        {preview.gist ? <span className="ref-card-gist">{preview.gist}</span> : null}
+        {glossary ? null : <span className="ref-card-file">{preview.file}</span>}
+      </span>
+    </span>
+  );
+}
+
 export function ReferencePill({
   text,
   reference,
@@ -293,20 +359,7 @@ export function ReferencePill({
     );
   }
   if (preview && onPeek) {
-    return (
-      <button
-        type="button"
-        className="ref-pill"
-        data-ref-rule={rule}
-        data-ref-state="preview"
-        aria-haspopup="dialog"
-        title={`${preview.title} (${preview.file})`}
-        onClick={(event) => onPeek(reference, event.currentTarget)}
-        data-action="peek-reference"
-      >
-        {label}
-      </button>
-    );
+    return <PeekPill label={label} rule={rule} reference={reference} onPeek={onPeek} />;
   }
   if (target.kind === 'document') {
     return (

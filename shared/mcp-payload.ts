@@ -1,8 +1,8 @@
 import { MAX_BUNDLE_FILES } from './mcp-limits.js';
 // Validate the bridge payload before allowing it into the shared renderer.
 import { z } from 'zod';
-import { CARD_FAMILIES, DOCUMENT_KINDS, DOCUMENT_STATUSES } from './api.js';
-import { MAX_PATTERN_LENGTH, MAX_REFERENCE_RULES } from './references.js';
+import { CARD_FAMILIES, DOCUMENT_KINDS, DOCUMENT_STATUSES, PREVIEW_GIST_MAX, PREVIEW_TITLE_MAX } from './api.js';
+import { GLOSSARY_RULE, MAX_GLOSSARY_TERMS, MAX_PATTERN_LENGTH, MAX_REFERENCE_RULES } from './references.js';
 import { BROKEN_RULE_LIMITS } from './model-check.js';
 import { LIFECYCLE_EVENTS, LIFECYCLE_STATES } from './lifecycle.js';
 import type { BundleSnapshot } from './mcp.js';
@@ -47,12 +47,15 @@ const workRecord = z.object({
 }).strict();
 const workTask = z.object({ id, title: z.string(), anchor: z.object({ diagram: z.number().int().nonnegative(), target: elementTarget }).strict().nullable(), dependsOn: z.array(id), state: lifecycleState, lastRecordAt: z.string().nullable(), lastBy: z.string().nullable() }).strict();
 const pageWork = z.object({ summary: workSummary, recorded: lifecycleState, tasks: z.array(workTask), records: z.array(workRecord), quietAfterMs: z.number().positive() }).strict();
-const preview = z.object({ title: z.string().max(500), body: z.string().max(65536), truncated: z.boolean(), links: z.record(z.string(), target), file: z.string() }).strict();
+const preview = z.object({ title: z.string().max(PREVIEW_TITLE_MAX), body: z.string().max(65536), truncated: z.boolean(), links: z.record(z.string(), target), file: z.string(), gist: z.string().max(PREVIEW_GIST_MAX) }).strict();
 const reference = z.object({ rule: z.string(), label: z.string().max(500), target, preview: preview.nullable() }).strict();
 const card = z.object({ name: z.string(), look: z.enum(['lifecycle', 'handoff', 'map', 'plain']), family: z.enum(CARD_FAMILIES), label: z.string().max(60) }).strict();
-const rule = z.object({ name: z.string(), match: z.string().max(MAX_PATTERN_LENGTH) }).strict();
-const response = z.object({ version: z.string(), document: summary, body: z.string().max(65536), links: z.record(z.string(), target), sources: z.array(z.object({ raw: z.string(), target })), diagramLinks: z.record(z.string(), crumb), diagramDetails: z.array(detail), breadcrumbs: z.array(crumb), children: z.array(summary), issues: z.array(issue),
-  referenceRules: z.array(rule).max(MAX_REFERENCE_RULES), references: z.record(z.string(), reference), cards: z.record(z.string(), card), work: pageWork.nullable() });
+const rule = z.union([
+  z.object({ name: z.string(), match: z.string().max(MAX_PATTERN_LENGTH) }).strict(),
+  z.object({ name: z.literal(GLOSSARY_RULE), terms: z.array(z.string().max(32)).max(MAX_GLOSSARY_TERMS) }).strict(),
+]);
+const response = z.object({ version: z.string(), document: summary, body: z.string().max(65536), links: z.record(z.string(), target), sources: z.array(z.object({ raw: z.string(), target })), diagramLinks: z.record(z.string(), crumb), linkedOverviews: z.record(z.string(), preview), diagramDetails: z.array(detail), breadcrumbs: z.array(crumb), children: z.array(summary), issues: z.array(issue),
+  referenceRules: z.array(rule).max(MAX_REFERENCE_RULES + 1), references: z.record(z.string(), reference), cards: z.record(z.string(), card), work: pageWork.nullable() });
 const bundleFile = z.union([z.object({ path: z.string(), markdown: z.string().max(65536) }).strict(), z.object({ path: z.string(), text: z.string().max(65536) }).strict()]);
 export const snapshotSchema = z.object({ storage: z.discriminatedUnion('kind', [z.object({kind:z.literal('memory')}), z.object({kind:z.literal('durable'),status:z.enum(['synced','unconfirmed']),projectPath:z.string()})]), files: z.array(bundleFile).min(1).max(MAX_BUNDLE_FILES), scope: z.uuid(), revision: z.number().int().positive(), catalog: z.object({ version: z.string(), rootId: id, documents: z.array(summary).min(1).max(MAX_BUNDLE_FILES), issues: z.array(issue) }), documents: z.array(response).min(1).max(MAX_BUNDLE_FILES) });
 
@@ -65,10 +68,11 @@ function authoredRecord<S extends z.ZodType>(raw: unknown, schema: S): Record<st
 
 export function readSnapshot(value: unknown): BundleSnapshot {
   const shape = snapshotSchema.parse(value);
-  const raw = z.object({ documents: z.array(z.object({ links: z.unknown(), diagramLinks: z.unknown(), references: z.unknown(), cards: z.unknown() })) }).parse(value);
+  const raw = z.object({ documents: z.array(z.object({ links: z.unknown(), diagramLinks: z.unknown(), linkedOverviews: z.unknown(), references: z.unknown(), cards: z.unknown() })) }).parse(value);
   const parsed = { ...shape, documents: shape.documents.map((doc, index) => ({ ...doc,
     links: authoredRecord(raw.documents[index]!.links, target),
     diagramLinks: authoredRecord(raw.documents[index]!.diagramLinks, crumb),
+    linkedOverviews: Object.fromEntries(Object.entries(authoredRecord(raw.documents[index]!.linkedOverviews, preview)).map(([key, value]) => [key, { ...value, links: authoredRecord((value as { links: unknown }).links, target) }])),
     references: Object.fromEntries(Object.entries(authoredRecord(raw.documents[index]!.references, reference)).map(([key, value]) => [key, value.preview ? { ...value, preview: { ...value.preview, links: authoredRecord((value.preview as { links: unknown }).links, target) } } : value])),
     cards: authoredRecord(raw.documents[index]!.cards, card),
   })) };

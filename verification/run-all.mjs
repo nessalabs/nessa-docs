@@ -25,6 +25,7 @@ import { runNavigation } from './navigation.mjs';
 import { runRealData } from './real-data.mjs';
 import { runSourceRevision } from './source-revision.mjs';
 import { runWork } from './work.mjs';
+import { runGlossary } from './glossary.mjs';
 import { runResponsive } from './responsive.mjs';
 import { runSettings } from './settings.mjs';
 import { runSidebarResize } from './sidebar-resize.mjs';
@@ -49,6 +50,8 @@ for (const engine of ['chromium', 'webkit']) {
   summary.push({ engine, script: revision.script, scope: 'fixture', ok: revision.ok, passed: revision.passed, total: revision.total });
   const work = await runWork(engine);
   summary.push({ engine, script: work.script, scope: 'fixture', ok: work.ok, passed: work.passed, total: work.total });
+  const glossary = await runGlossary(engine);
+  summary.push({ engine, script: glossary.script, scope: 'example', ok: glossary.ok, passed: glossary.passed, total: glossary.total });
   process.env.BASE_URL = welcome;
   const onboarding = await runOnboarding(engine);
   summary.push({ engine, script: onboarding.script, scope: 'package', baseUrl: welcome, ok: onboarding.ok, passed: onboarding.passed, total: onboarding.total });

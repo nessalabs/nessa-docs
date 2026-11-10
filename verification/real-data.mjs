@@ -94,6 +94,7 @@ export async function runRealData(engine) {
       const service = linked.find((id) => byId.get(id)?.children.length) ?? linked[0];
       if (service) {
         await page.locator(S.diagramNode(service)).first().click();
+        await page.locator('dialog.reference-peek[open] .inspector-open a').click();
         await waitForDocument(page, service);
         c.check(`diagram → ${service}`, path() === `/docs/${service}`);
         let current = byId.get(service);
@@ -270,6 +271,7 @@ export async function runRealData(engine) {
       c.check('root: External provider runtime is not a link and clicking it goes nowhere', providerFacts !== null && providerFacts.role === null && providerFacts.tabindex === null && providerFacts.target === null && !providerFacts.mark && providerFacts.cursor !== 'pointer' && stayed, providerFacts);
       await nav.page.locator(S.diagramNode('mcp')).first().focus();
       await nav.page.keyboard.press('Enter');
+      await nav.page.locator('dialog.reference-peek[open] .inspector-open a').click();
       await waitForDocument(nav.page, 'mcp');
       c.check('root → MCP by keyboard (Enter on the focused node)', new URL(nav.page.url()).pathname === '/docs/mcp');
       await waitForDiagrams(nav.page);
@@ -277,6 +279,7 @@ export async function runRealData(engine) {
       const mcpTarget = mcpLinks.targets[0];
       if (mcpTarget) {
         await nav.page.locator(S.diagramNode(mcpTarget)).first().click();
+        await nav.page.locator('dialog.reference-peek[open] .inspector-open a').click();
         await waitForDocument(nav.page, mcpTarget);
       }
       c.check('MCP service → leaf by mouse on a linked node', Boolean(mcpTarget) && new URL(nav.page.url()).pathname === `/docs/${mcpTarget}`, { mcpTargets: mcpLinks.targets });
@@ -284,6 +287,7 @@ export async function runRealData(engine) {
       await waitForDocument(nav.page, root.id);
       await waitForDiagrams(nav.page);
       await nav.page.locator(S.diagramNode('gateway')).first().click();
+      await nav.page.locator('dialog.reference-peek[open] .inspector-open a').click();
       await waitForDocument(nav.page, 'gateway');
       c.check('root → Local gateway by mouse', new URL(nav.page.url()).pathname === '/docs/gateway');
       await nav.context.close();

@@ -332,6 +332,46 @@ function DocumentView({ response, focusOnLoad, onChecked, pending }: { response:
     peekFrom.current = null;
     if (from?.isConnected) from.focus({ preventScroll: true });
   }, []);
+  // A chart node that links to a page shows that page's overview in the same peek; the peek offers the page.
+  const previewDocument = useCallback((id: string, element: Element) => {
+    const overview = Object.hasOwn(response.linkedOverviews, id) ? response.linkedOverviews[id] : undefined;
+    if (!overview) {
+      navigate(documentPath(id));
+      return;
+    }
+    invoker.current = null;
+    setSelected(null);
+    peekFrom.current = element instanceof HTMLElement || element instanceof SVGElement ? (element as HTMLElement) : null;
+    setPeek({ rule: 'page', label: 'Overview', target: { kind: 'document', id, fragment: null }, preview: overview });
+  }, [response.linkedOverviews]);
+  // A side panel (details or peek) closes on a click outside it: a press and release that does not move,
+  // so panning a chart beside it keeps it open. A press on a control does what that control does instead
+  // (a node or pill opens its own panel, the Outline and chart controls layer over it), and focus stays
+  // where the person clicked. A modal panel already covers the page, so this is for the side pane only.
+  const sideOpen = (selected !== null || peek !== null) && !(narrow || expandedCharts > 0);
+  useEffect(() => {
+    if (!sideOpen) return;
+    let press: { x: number; y: number } | null = null;
+    const onDown = (event: PointerEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      press = event.button === 0 && target && !target.closest(KEEPS_SIDE_PANEL) ? { x: event.clientX, y: event.clientY } : null;
+    };
+    const onUp = (event: PointerEvent) => {
+      if (!press || Math.hypot(event.clientX - press.x, event.clientY - press.y) >= 4) return;
+      press = null;
+      invoker.current = null;
+      focusAfterClose.current = null;
+      peekFrom.current = null;
+      setSelected(null);
+      setPeek(null);
+    };
+    window.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('pointerup', onUp, true);
+    return () => {
+      window.removeEventListener('pointerdown', onDown, true);
+      window.removeEventListener('pointerup', onUp, true);
+    };
+  }, [sideOpen]);
   useEffect(() => {
     if (selected !== null) setPeek(null);
   }, [selected]);
@@ -383,6 +423,7 @@ function DocumentView({ response, focusOnLoad, onChecked, pending }: { response:
       details={detailsByDiagram.get(index) ?? NO_DETAILS}
       selectedDetail={selection?.detail.diagram === index ? selection.key : null}
       onSelectDetail={selectDetail}
+      onPreviewDocument={previewDocument}
       onExpandedChange={onExpandedChange}
       revealLeftOf={selection?.detail.diagram === index && !narrow ? paneLeft : null}
       ruleMarks={ruleMarks}
@@ -634,6 +675,9 @@ function DocumentView({ response, focusOnLoad, onChecked, pending }: { response:
     </>
   );
 }
+
+/** A press on these does its own thing rather than closing the side panel: the panel itself and every control. */
+const KEEPS_SIDE_PANEL = '.detail-inspector, button, a[href], input, select, textarea, summary, label, [role="button"], [role="link"], [role="menu"], [role="menuitem"], [role="tab"], [role="slider"]';
 
 /** "On this page": the headings, one click away instead of a permanent column. */
 function OutlineMenu({ headings, hrefFor, pending }: { headings: readonly Heading[]; hrefFor: (slug: string) => string; pending: boolean }) {

@@ -106,6 +106,24 @@ describe('documentResponse', () => {
     }
   });
 
+  it('gives each page a chart node links to as an overview: its opening below the title, else its summary', async () => {
+    const tree = {
+      [`${STATE}/README.md`]: doc('nessa', null, { diagramLinks: { Chat: 'chat', Bare: 'bare' } }, '# Nessa\n\n```mermaid\nflowchart LR\n Chat --> Bare\n```\n'),
+      [`${STATE}/chat/README.md`]: doc('chat', 'nessa', {}, '# Chat\n\n```mermaid\nflowchart LR\n A --> B\n```\n\nChat carries messages. See [bare](../bare/README.md).\n\nIt keeps order.\n\n## Steps\n\nNot in the overview.\n'),
+      [`${STATE}/bare/README.md`]: doc('bare', 'nessa', {}, '# Bare\n\n## Only sections\n\nText.\n'),
+    };
+    const { catalog, files } = await setup(tree);
+    const response = (await documentResponse(catalog, 'nessa', files)) as DocumentResponse;
+    const chat = response.linkedOverviews.chat;
+    expect(chat).toMatchObject({ title: 'Title chat', gist: 'Summary of chat', file: 'docs/state/chat/README.md', truncated: false });
+    expect(chat?.body).toContain('It keeps order.');
+    expect(chat?.body).not.toContain('# Chat');
+    expect(chat?.body).not.toContain('mermaid');
+    expect(chat?.body).not.toContain('Not in the overview');
+    expect(chat?.links['../bare/README.md']).toEqual({ kind: 'document', id: 'bare', fragment: null });
+    expect(response.linkedOverviews.bare?.body).toBe('Summary of bare\n');
+  });
+
   it('resolves every body link, the sources, diagram links, breadcrumbs and children', async () => {
     const { catalog, files } = await setup();
     const response = (await documentResponse(catalog, 'chat', files)) as DocumentResponse;

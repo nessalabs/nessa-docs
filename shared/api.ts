@@ -147,6 +147,9 @@ export type IssueCode =
   | 'unknown-card'
   | 'card-family-mismatch'
   | 'unresolved-reference'
+  // glossary.md pages (server/glossary.ts).
+  | 'invalid-glossary-entry'
+  | 'unlisted-acronym'
   | 'missing-source-revision'
   // Work records under docs/state/work (server/work.ts).
   | 'invalid-record'
@@ -255,6 +258,20 @@ export interface CardStyle {
 export const STATE_ROLES = ['start', 'working', 'waiting', 'done', 'refused', 'uncertain', 'ended'] as const;
 export type StateRole = (typeof STATE_ROLES)[number];
 
+/** The longest preview title a bundle carries, in UTF-16 units (shared/mcp-payload.ts); the server cuts to it. */
+export const PREVIEW_TITLE_MAX = 500;
+/** The longest hover text a bundle carries; the server's gist (server/glossary.ts gistOf) is well under it. */
+export const PREVIEW_GIST_MAX = 1000;
+
+/** `text` cut to at most `max` UTF-16 units with an ellipsis, never inside a surrogate pair. */
+export function cutText(text: string, max: number): string {
+  if (text.length <= max) return text;
+  let end = max - 1;
+  const last = text.charCodeAt(end - 1);
+  if (last >= 0xd800 && last <= 0xdbff) end -= 1;
+  return `${text.slice(0, end)}…`;
+}
+
 /** What a reference pill shows in its peek: a page, a section of one, or a note file. */
 export interface ReferencePreview {
   readonly title: string;
@@ -265,6 +282,8 @@ export interface ReferencePreview {
   readonly links: Readonly<Record<string, LinkTarget>>;
   /** The file the preview came from, repository-relative. */
   readonly file: string;
+  /** The first paragraph as plain text, cut short: what a pill shows on hover. */
+  readonly gist: string;
 }
 
 /** A matched reference after the server resolved it. */
@@ -277,11 +296,10 @@ export interface ResolvedReference {
   readonly preview: ReferencePreview | null;
 }
 
-/** A reference pattern as the browser receives it: the same split the server used. */
-export interface ReferenceRuleView {
-  readonly name: string;
-  readonly match: string;
-}
+/** A reference pattern as the browser receives it: the same split the server used. The glossary travels as its terms (shared/references.ts glossaryRegex). */
+export type ReferenceRuleView =
+  | { readonly name: string; readonly match: string }
+  | { readonly name: 'glossary'; readonly terms: readonly string[] };
 
 export interface DocumentResponse {
   readonly version: string;
@@ -293,6 +311,8 @@ export interface DocumentResponse {
   readonly sources: readonly SourceReference[];
   /** Mermaid node ID → validated target document. */
   readonly diagramLinks: Readonly<Record<string, Crumb>>;
+  /** The overview of each page a chart node links to, by page ID: what clicking that node shows beside the page. */
+  readonly linkedOverviews: Readonly<Record<string, ReferencePreview>>;
   /** Chart elements with an explanation in this document; entries that could not be bound are warnings instead. */
   readonly diagramDetails: readonly DiagramDetail[];
   /** Root first, this document last. */

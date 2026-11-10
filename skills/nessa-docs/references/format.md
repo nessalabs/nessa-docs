@@ -181,7 +181,12 @@ flowchart LR
     Store[Storefront] --> Payments[Payments]
 ```
 
-Only mapped nodes navigate. A + marks them. Unmapped nodes stay neutral.
+Only mapped nodes lead anywhere. A + marks them. Unmapped nodes stay neutral.
+Clicking a mapped node shows the linked page's overview beside the chart, with
+**Open page** to go there. The overview is the page's opening: the text between
+its `#` title and its first `##` heading, without charts. A page with no opening
+shows its `summary`. So open every page with a short paragraph that says what
+it is and what it owns, and put the details under headings after it.
 
 ## State and decision explanations
 
@@ -361,6 +366,46 @@ The server finds and resolves every pill when it serves a page; the browser
 draws them from that answer and never builds a link itself. Over MCP, `file`
 targets do not exist (a bundle holds only `docs/state`), so use `document`
 and `url` targets there.
+
+### Glossary
+
+Each package keeps its acronyms in one page named `glossary.md`. A glossary
+covers its own folder and every folder below it, so `docs/state/glossary.md`
+covers the whole project and `docs/state/services/sdk/glossary.md` adds the
+SDK's own terms. Where two glossaries list the same term, the nearer one wins.
+It is a normal page, with frontmatter like any other (`kind: guide`,
+`status: reference`, `parent` the README of its folder).
+
+Each entry is a `##` heading that is the term alone, with a paragraph under it
+that says what the term stands for and what it is in this project:
+
+```markdown
+## SDK
+
+Software development kit. The client library every agent links to send
+commands to the gateway.
+```
+
+A term is one word of letters and digits, which may hold `+ & . / -` inside it
+(`SDK`, `gRPC`, `TLA+`, `I/O`). Everything else is the definition: further
+paragraphs, lists, and `###` subheadings belong to the entry.
+
+Write a term as plain text; do not link it by hand. Every use of a term on a
+covered page, written exactly or with a plural `s` (`SDKs`), becomes a link to
+its entry: it is underlined with dots, shows the first paragraph on hover, and
+opens the entry beside the page on click. As for pills, code, link text and
+diagrams are left alone, a match never splits a word, and a project's own
+`references` come first, so `ADR-12` stays an ADR pill when `ADR` is also a term.
+No config is needed, and a project reference may not be named `glossary`.
+
+Health checks a glossary in two ways, both as warnings:
+
+- `invalid-glossary-entry`: a `##` heading that is not a term, a term listed
+  twice in one glossary, or a term with no paragraph under it.
+- `unlisted-acronym`: a covered page uses an acronym (two or more capitals,
+  such as `CI`, `PR` or `HTTP2`) that none of its glossaries lists. The warning
+  names the glossary to add it to. Write a word that is code in backticks.
+  Pages that no glossary covers are not checked.
 
 ## Tracking work
 

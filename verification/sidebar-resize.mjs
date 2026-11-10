@@ -307,9 +307,11 @@ export async function runSidebarResize(engine) {
       await page.mouse.up();
       await page.waitForTimeout(300);
       const releasedOver = await layout(page);
-      c.check(`${where}: a drag released over a linked node does not navigate (capture)`, new URL(page.url()).pathname === '/docs/nessa' && releasedOver.sidebar.width === 350, { path: new URL(page.url()).pathname });
+      c.check(`${where}: a drag released over a linked node does not navigate (capture)`, new URL(page.url()).pathname === '/docs/nessa' && (await page.locator('dialog.reference-peek[open]').count()) === 0 && releasedOver.sidebar.width === 350, { path: new URL(page.url()).pathname });
       const nb2 = await node.boundingBox();
       await page.mouse.click(nb2.x + nb2.width / 2, nb2.y + nb2.height / 2);
+      // A linked node shows the page's overview first; Open page goes there.
+      await page.locator('dialog.reference-peek[open] .inspector-open a').click();
       await waitForDocument(page, 'chat');
       c.check(`${where}: after resizing, a linked node click still opens its document`, new URL(page.url()).pathname === '/docs/chat');
       measurements[where].end = await layout(page);

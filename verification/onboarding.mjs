@@ -83,7 +83,7 @@ export async function runOnboarding(engine) {
     await waitForDocument(page, 'example-store'); await waitForDiagrams(page);
     facts.exampleHandle = handle();
     c.check('P2 bundled example: arbitrary root ID, authored title, two working links', (await page.title()) === 'Example store · Nessa Docs' && Boolean(handle()) && (await page.locator(S.diagramNodes).count()) === 2);
-    await page.locator(S.diagramNode('order-lifecycle')).click(); await waitForDocument(page, 'order-lifecycle'); await waitForDiagrams(page);
+    await page.locator(S.diagramNode('order-lifecycle')).click(); await page.locator('dialog.reference-peek[open] .inspector-open a').click(); await waitForDocument(page, 'order-lifecycle'); await waitForDiagrams(page);
     c.check('project handle stays on chart navigation and sidebar hrefs', handle() === facts.exampleHandle && new URL(await page.locator(S.treeLink('example-store')).getAttribute('href'), BASE).searchParams.get('project') === facts.exampleHandle);
     c.check('Diagrams label has no count', (await page.locator(S.viewDiagrams).innerText()).trim() === 'Diagrams');
     await page.locator(S.detailControl(0)).first().click(); await page.locator(S.inspectorTitle).waitFor();

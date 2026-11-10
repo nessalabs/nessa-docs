@@ -235,10 +235,14 @@ export async function runDetails(engine = 'chromium') {
     await waitForDocument(page, 'nessa');
     await waitForDiagrams(page);
     const root = await nodeLinkFacts(page);
-    c.check('D3 root: the navigation-only node (Gate) has a + and is a link; Person and Other inert', root.linked === 1 && root.linkedWithMark === 1 && root.linkedWithRole === 1 && root.unlinkedInert === root.unlinked, root);
+    c.check('D3 root: the navigation-only node (Gate) has a + and opens its overview; Person and Other inert', root.linked === 1 && root.linkedWithMark === 1 && root.linkedWithRole === 1 && root.unlinkedInert === root.unlinked, root);
     await page.locator(S.diagramNode('gate')).first().click();
+    const overview = page.locator('dialog.reference-peek[open]');
+    await overview.waitFor();
+    c.check('D3 a navigation-only node shows the page\'s overview first, and stays on this page', new URL(page.url()).pathname === '/docs/nessa' && (await overview.innerText()).includes('Open page'));
+    await overview.locator('.inspector-open a').click();
     await waitForDocument(page, 'gate');
-    c.check('D3 a navigation-only node still navigates at once', new URL(page.url()).pathname === '/docs/gate' && !(await inspectorFacts(page)).open);
+    c.check('D3 Open page in the overview navigates', new URL(page.url()).pathname === '/docs/gate' && !(await inspectorFacts(page)).open);
     await waitForDiagrams(page);
     await shot(page, 'gate-standard-desktop');
 
@@ -603,7 +607,7 @@ export async function runDetails(engine = 'chromium') {
     })));
     facts.map.nodes = mapNodes;
     const byNode = Object.fromEntries(mapNodes.map((n) => [n.id, n]));
-    c.check('D22 nodes: navigation-only is a link, navigation + details is a details button, the rest inert; one + each where there is depth', byNode.Gate?.role === 'link' && byNode.Gate.marks === 1 && byNode.Review?.role === 'button' && byNode.Review.label === 'Details: Review (also opens Review flow)' && byNode.Review.marks === 1 && ['Audit', 'Sender', 'Plain'].every((n) => byNode[n]?.role === null && byNode[n].marks === 0), mapNodes);
+    c.check('D22 nodes: navigation-only opens its overview, navigation + details is a details button, the rest inert; one + each where there is depth', byNode.Gate?.role === 'button' && byNode.Gate.marks === 1 && byNode.Review?.role === 'button' && byNode.Review.label === 'Details: Review (also opens Review flow)' && byNode.Review.marks === 1 && ['Audit', 'Sender', 'Plain'].every((n) => byNode[n]?.role === null && byNode[n].marks === 0), mapNodes);
     await map.page.locator(S.detailControl(READY)).click();
     let mins = await inspectorFacts(map.page);
     c.check('D22 clicking "ready" opens the inset pane titled by its section, kind Edge, naming the edge and label', mins.open && !mins.modal && mins.layout === 'pane' && mins.title === 'Gate readiness' && mins.kind === 'Edge' && mins.element.startsWith('Gate → Review') && mins.element.endsWith('ready') && !mins.element.includes('refused') && mins.activeIsTitle, mins);
@@ -638,9 +642,10 @@ export async function runDetails(engine = 'chromium') {
     await map.page.goto(`${BASE}/docs/gate-map`);
     await waitForDocument(map.page, 'gate-map');
     await waitForDiagrams(map.page);
-    await map.page.locator(`figure.diagram .diagram-svg svg [role="link"][data-target-id="gate"]`).click();
+    await map.page.locator(`figure.diagram .diagram-svg svg [role="button"][data-target-id="gate"]`).click();
+    await map.page.locator('dialog.reference-peek[open] .inspector-open a').click();
     await map.page.waitForURL((url) => url.pathname === '/docs/gate');
-    c.check('D22 a navigation-only node navigates at once, opening nothing', !(await inspectorFacts(map.page)).open, { url: map.page.url() });
+    c.check('D22 a navigation-only node shows its overview, whose Open page navigates, opening nothing else', !(await inspectorFacts(map.page)).open, { url: map.page.url() });
     // Compact: the labels go (but the open one), the + marks and names stay, the edge still opens.
     await map.page.evaluate((key) => localStorage.setItem(key, 'compact'), DETAIL_KEY);
     await map.page.goto(`${BASE}/docs/gate-map`);

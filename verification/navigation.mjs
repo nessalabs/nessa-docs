@@ -514,7 +514,7 @@ export async function runNavigation(engine, only = null) {
       await drag(page, node, { x: 0, y: -60 }, 10);
       await page.waitForTimeout(300);
       const rootAfter = await stageState(page);
-      c.check('drag that starts on a linked node pans and does not navigate', path(page) === '/docs/nessa' && (rootAfter.top !== rootBefore.top || rootBefore.maxTop === 0), { before: rootBefore.top, after: rootAfter.top });
+      c.check('drag that starts on a linked node pans and does not navigate', path(page) === '/docs/nessa' && (await page.locator('dialog.reference-peek[open]').count()) === 0 && (rootAfter.top !== rootBefore.top || rootBefore.maxTop === 0), { before: rootBefore.top, after: rootAfter.top });
       // Leave the node and come back to it before releasing: still a pan, never a click on the node.
       const home = await nodeCenter(page, 'host');
       await page.mouse.move(home.x, home.y);
@@ -526,21 +526,26 @@ export async function runNavigation(engine, only = null) {
       const releasedOn = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('[data-target-id]')?.getAttribute('data-target-id') ?? null, back);
       await page.mouse.up();
       await page.waitForTimeout(300);
-      c.check('drag away from a linked node and back onto it: a pan, not a click (no navigation)', midDrag && releasedOn === 'host' && path(page) === '/docs/nessa', { midDrag, releasedOn, path: path(page) });
+      c.check('drag away from a linked node and back onto it: a pan, not a click (no navigation)', midDrag && releasedOn === 'host' && path(page) === '/docs/nessa' && (await page.locator('dialog.reference-peek[open]').count()) === 0, { midDrag, releasedOn, path: path(page) });
       const node2 = await nodeCenter(page, 'host');
       await page.mouse.move(node2.x, node2.y);
       await page.mouse.down();
       await page.mouse.move(node2.x + 2, node2.y + 1);
       await page.mouse.up();
+      await page.locator('dialog.reference-peek[open] .inspector-open a').waitFor();
+      c.check('a press that moves < 4px is a click: the linked node opens its overview', path(page) === '/docs/nessa');
+      await page.locator('dialog.reference-peek[open] .inspector-open a').click();
       await waitForDocument(page, 'host');
-      c.check('a press that moves < 4px is a click: the linked node opens', path(page) === '/docs/host');
       await page.goBack();
       await waitForDocument(page, 'nessa');
       await waitForDiagrams(page);
       await page.locator(S.diagramNode('mcp')).first().focus();
       await page.keyboard.press('Enter');
+      await page.locator('dialog.reference-peek[open] .inspector-open a').waitFor();
+      c.check('keyboard Enter on a focused linked node opens its overview in place', path(page) !== '/docs/mcp');
+      await page.locator('dialog.reference-peek[open] .inspector-open a').click();
       await waitForDocument(page, 'mcp');
-      c.check('keyboard Enter on a focused linked node still navigates', path(page) === '/docs/mcp');
+      c.check('Open page in that overview navigates', path(page) === '/docs/mcp');
       await page.goBack();
       await waitForDocument(page, 'nessa');
       await waitForDiagrams(page);

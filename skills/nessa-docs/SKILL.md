@@ -153,6 +153,18 @@ where readers need them to act. A diagram must carry its important failure and
 retry conditions, or clearly name the portion of the behavior it leaves out.
 Do not replace a wall of prose with a wall of boxes.
 
+Open every page with a short paragraph under its title that says what it is and
+what it owns. A chart node that links to the page shows that opening as its
+overview, so keep it readable on its own and start the details at the first
+`##` heading.
+
+Keep each package's acronyms in a [glossary](references/format.md#glossary): a
+`glossary.md` page beside the package's README, with a `## TERM` heading and a
+paragraph saying what it stands for and what it is here. When a page you write
+uses a new acronym, add it to the nearest glossary in the same change. Write the
+acronym as plain text; the reader links every use to its entry and shows the
+meaning on hover. Fix every `unlisted-acronym` warning before you finish.
+
 Use `diagramLinks` for drill-down and `diagramDetails` for explanations in the
 owning Markdown. Each clickable explanation should make sense on its own: what
 happened, what allows the next step, and what remains uncertain. Full detail
@@ -182,8 +194,8 @@ alone does not satisfy this requirement or prove the implementation correct.
 
 ## Check and open
 
-Check stable IDs, parents, relative links, headings, Mermaid syntax and diagram
-targets. If the local Nessa Docs checkout is available, run its catalog check:
+Check stable IDs, parents, relative links, headings, Mermaid syntax, diagram
+targets and glossary warnings. If the local Nessa Docs checkout is available, run its catalog check:
 
 ```sh
 npm run --silent validate:docs -- --project /absolute/project/path
