@@ -6,7 +6,9 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadCatalog } from './catalog.js';
+import { DEFAULT_LIMITS, loadCatalog } from './catalog.js';
+import { readDiagram as readWithMermaid } from './diagram-reader.js';
+import { cachedHistory } from './source-history.js';
 import { createFolderPicker } from './project-opening/folder-picker.js';
 import { macFolderDialog, nodeMacDialogProcesses } from './project-opening/macos-dialog.js';
 import { createProjects } from './project-opening/projects.js';
@@ -59,14 +61,16 @@ if (outcome.kind === 'invalid') {
 }
 const { project, port } = outcome.config;
 const files = nodeRepositoryFiles();
+const history = cachedHistory();
+const readCatalog = (root: string) => loadCatalog(files, root, DEFAULT_LIMITS, readWithMermaid, { history });
 const clientDirectory = fileURLToPath(new URL('../../client/', import.meta.url));
-const projects = createProjects({ loadCatalog: (root) => loadCatalog(files, root), mintId: randomUUID });
+const projects = createProjects({ loadCatalog: readCatalog, mintId: randomUUID });
 await projects.start(project);
 const exampleRoot = fileURLToPath(new URL('../../../examples/store/', import.meta.url));
 const checker = createCheckerCache();
 const modelChecks = createModelCheckService({
   files,
-  loadCatalog: (root) => loadCatalog(files, root),
+  loadCatalog: readCatalog,
   runtime: () => checker.runtime(),
   status: () => checker.status(),
   install: (signal) => checker.install(signal),
@@ -75,7 +79,7 @@ const shutdown = new AbortController();
 const folderPicker = createFolderPicker(process.platform === 'darwin' ? macFolderDialog(nodeMacDialogProcesses()) : null, shutdown.signal);
 const server = createServer(
   nodeHandler({
-    loadCatalog: (root) => loadCatalog(files, root),
+    loadCatalog: readCatalog,
     projects,
     folderPicker,
     exampleRoot,

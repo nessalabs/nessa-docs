@@ -9,6 +9,7 @@ import { useProjectReads } from './project-opening/project-context';
 import { byKind, KIND_NAME } from './kinds';
 import { AppLink, documentPath, settingsPath } from './router';
 import { RuleStatusIcon } from './rule-check';
+import { WORK_TEXT } from './ui';
 import { Input } from './ui';
 
 interface SidebarProps {
@@ -124,6 +125,11 @@ function Row(props: {
           </span>
         ) : null}
         <span className="row-label">{document.title}</span>
+        {document.work ? (
+          <span className="row-work" data-work-state={document.work.state} title={`Work: ${WORK_TEXT[document.work.state]}${document.work.blocked > 0 ? `, ${document.work.blocked} blocked` : ''}`}>
+            {WORK_TEXT[document.work.state]}
+          </span>
+        ) : null}
         <RuleStatusIcon model={document.model !== undefined} modelCheck={document.modelCheck} stale={document.modelCheckStale} />
       </AppLink>
     </div>

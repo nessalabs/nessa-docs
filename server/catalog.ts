@@ -12,6 +12,9 @@ import type { RepositoryFiles } from './files.js';
 import { isInside } from './path-containment.js';
 import { type DiagramReader, readDiagram as readWithMermaid } from './diagram-reader.js';
 import { textCache } from '../shared/memo.js';
+import { NO_HISTORY, type SourceHistory } from './source-history.js';
+import { bindAnchors, pageWork, readRecords, replayPage, WORK_DIRECTORY } from './work.js';
+import type { PageWork } from '../shared/api.js';
 import { cardFits, CONFIG_FILE, CONFIG_NAME, EMPTY_CONFIG, MAX_CONFIG_BYTES, parseProjectConfig, type ProjectConfig } from './project-config.js';
 
 export const STATE_DIRECTORY = 'docs/state';
@@ -36,6 +39,14 @@ export interface CatalogDocument {
   /** The `diagramDetails` entries that bound; the rest are among `warnings`. */
   readonly diagramDetails: readonly DiagramDetail[];
   readonly warnings: readonly CatalogIssue[];
+  /** The page's tasks and records, judged by the lifecycle; null when it has neither. */
+  readonly work: PageWork | null;
+}
+
+/** What a catalog load may ask besides the files: the clock (records dated in the future are refused) and the source history (implemented pages turn stale). */
+export interface CatalogContext {
+  readonly now?: () => number;
+  readonly history?: SourceHistory;
 }
 
 export interface Catalog {
@@ -88,7 +99,10 @@ export async function loadCatalog(
   repoRoot: string,
   limits: LoaderLimits = DEFAULT_LIMITS,
   readDiagram: DiagramReader = readWithMermaid,
+  context: CatalogContext = {},
 ): Promise<Catalog> {
+  const now = (context.now ?? Date.now)();
+  const history = context.history ?? NO_HISTORY;
   const issues: CatalogIssue[] = [];
   const issue = (
     file: string,
@@ -120,7 +134,10 @@ export async function loadCatalog(
   // Walk docs/state, reading Markdown files only.
   const texts: { file: string; text: string }[] = [];
   const found: { file: string; absolute: string }[] = [];
+  // Records under docs/state/work are not pages; they are read on their own, with their own count.
+  const recordsFound: { file: string; absolute: string }[] = [];
   let fileCount = 0;
+  let recordCount = 0;
   let stopped = false;
   const walk = async (absolute: string, relative: string, depth: number): Promise<void> => {
     const entries = [...(await files.list(absolute))].sort((a, b) => a.name.localeCompare(b.name));
@@ -148,6 +165,13 @@ export async function loadCatalog(
         } else {
           await walk(childAbsolute, childRelative, depth + 1);
         }
+      } else if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.md') && childRelative.startsWith(`${WORK_DIRECTORY}/`)) {
+        recordCount += 1;
+        if (recordCount > limits.maxFiles) {
+          if (recordCount === limits.maxFiles + 1) issue(WORK_DIRECTORY, 'too-many-files', `more than ${limits.maxFiles} work records; the rest were not read`);
+          continue;
+        }
+        recordsFound.push({ file: childRelative, absolute: childAbsolute });
       } else if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.md')) {
         fileCount += 1;
         if (fileCount > limits.maxFiles) {
@@ -162,17 +186,19 @@ export async function loadCatalog(
   await walk(state.realPath, STATE_DIRECTORY, 0);
 
   // Read the files found, several at a time (the reads are independent), keeping walk order.
-  const reads = new Array<Awaited<ReturnType<RepositoryFiles['readText']>>>(found.length);
+  const toRead = [...found, ...recordsFound];
+  const reads = new Array<Awaited<ReturnType<RepositoryFiles['readText']>>>(toRead.length);
   let next = 0;
-  await Promise.all(Array.from({ length: Math.min(READ_CONCURRENCY, found.length) }, async () => {
-    while (next < found.length) {
+  await Promise.all(Array.from({ length: Math.min(READ_CONCURRENCY, toRead.length) }, async () => {
+    while (next < toRead.length) {
       const at = next++;
-      reads[at] = await files.readText((found[at] as { absolute: string }).absolute, limits.maxBytes, state.realPath);
+      reads[at] = await files.readText((toRead[at] as { absolute: string }).absolute, limits.maxBytes, state.realPath);
     }
   }));
-  found.forEach(({ file }, at) => {
+  const recordTexts: { file: string; text: string }[] = [];
+  toRead.forEach(({ file }, at) => {
     const read = reads[at] as Awaited<ReturnType<RepositoryFiles['readText']>>;
-    if (read.kind === 'text') texts.push({ file, text: read.text });
+    if (read.kind === 'text') (at < found.length ? texts : recordTexts).push({ file, text: read.text });
     else if (read.kind === 'too-large') {
       issue(file, 'file-too-large', `${read.size} bytes exceeds the ${limits.maxBytes}-byte limit`);
     } else {
@@ -182,6 +208,7 @@ export async function loadCatalog(
 
   const version = createHash('sha256');
   for (const { file, text } of texts) version.update(file).update('\0').update(text).update('\0');
+  for (const { file, text } of recordTexts) version.update(file).update('\0').update(text).update('\0');
 
   // The optional project config. Its problems are errors on the config file; the valid parts still apply.
   let config: ProjectConfig = EMPTY_CONFIG;
@@ -442,6 +469,32 @@ export async function loadCatalog(
     const parent = candidate.parsed.parent;
     if (parent !== null) children.set(parent, [...(children.get(parent) ?? []), candidate.parsed.id]);
   }
+  // Work: replay each page's records and bind its task anchors.
+  // A record that cannot be read is listed on its page too, so the page says it has a problem.
+  const candidateById = new Map(accepted.map((candidate) => [candidate.parsed.id, candidate]));
+  const recordsByPage = readRecords(recordTexts, new Set(candidateById.keys()), now, (file, code, message, documentId) => {
+    const entry = issue(file, code, message, documentId);
+    if (documentId !== null) candidateById.get(documentId)?.warnings.push(entry);
+  });
+  const workById = new Map<string, PageWork>();
+  for (const candidate of ordered) {
+    const { id, work: tasks, body, sourceRevision, sources, model, modelCheck } = candidate.parsed;
+    const records = recordsByPage.get(id) ?? [];
+    if (tasks.length === 0 && records.length === 0) continue;
+    const page = { id, tasks, ...(sourceRevision ? { sourceRevision } : {}), hasModel: model !== undefined, ...(modelCheck ? { modelCheck, modelCheckStale: modelFacts.get(id)?.stale ?? true } : {}) };
+    const replay = replayPage(page, records, config.work);
+    for (const record of replay.records) {
+      if (record.refused === null) continue;
+      const unknownTask = record.task !== null && !tasks.some((task) => task.id === record.task);
+      candidate.warnings.push(issue(record.file, unknownTask ? 'unknown-work-task' : 'refused-record', record.refused, id));
+    }
+    const bound = await bindAnchors(tasks, body, readDiagram);
+    for (const problem of bound.problems) candidate.warnings.push(issue(candidate.file, problem.code, problem.message, id, 'warning'));
+    const finished = replay.recorded === 'implemented' || replay.recorded === 'verified';
+    const stale = finished && sourceRevision !== undefined && sources.length > 0 && (await history.changedSince(repo.realPath, sourceRevision, sources)) === 'changed';
+    workById.set(id, pageWork(page, replay, bound.anchors, stale, config.work));
+  }
+
   const documents = new Map<string, CatalogDocument>();
   for (const candidate of ordered) {
     const { id, title, kind, status, summary, sourceRevision, parent, body, sources, diagramLinks, model, modelCheck } = candidate.parsed;
@@ -451,12 +504,14 @@ export async function loadCatalog(
         id, title, kind, status, summary, ...(sourceRevision ? { sourceRevision } : {}), parent, children: children.get(id) ?? [], file: candidate.file,
         ...(model ? { model } : {}),
         ...(modelCheck ? { modelCheck, modelCheckStale: stale?.stale ?? true } : {}),
+        ...(workById.has(id) ? { work: (workById.get(id) as PageWork).summary } : {}),
       },
       body,
       sources,
       diagramLinks,
       diagramDetails: detailsById.get(id) ?? [],
       warnings: candidate.warnings,
+      work: workById.get(id) ?? null,
     });
   }
 

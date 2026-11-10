@@ -277,6 +277,12 @@ notes:                       # repository folders or files a pill may show
 
 authoring:
   requireSourceRevision: true
+
+work:                        # optional; see Tracking work
+  people: [saurav]           # who may accept a plan or answer a question
+  quietAfter: 2h             # open work with no newer record is shown as quiet
+  require:                   # extra needs per event; never new states or events
+    merge: [check]
 ```
 
 Each problem in the file is an `invalid-config` error in Health, and the valid
@@ -355,3 +361,111 @@ The server finds and resolves every pill when it serves a page; the browser
 draws them from that answer and never builds a link itself. Over MCP, `file`
 targets do not exist (a bundle holds only `docs/state`), so use `document`
 and `url` targets there.
+
+## Tracking work
+
+A page can carry its own plan, and agents record progress next to it as plain
+files. Nessa Docs reads both and draws them: each task's state outlines the box
+or arrow it is anchored to, the sidebar shows the page's state, and the page
+gets a Work view with every record. Nothing needs the app to be running.
+
+### The lifecycle
+
+Every page and task is in one of eight states, and only these events move it.
+The list is fixed and ships with Nessa Docs in
+[lifecycle.json](lifecycle.json); the validator and the reader both read that
+file, so neither can disagree with it.
+
+| Event | From | To | Needs |
+| --- | --- | --- | --- |
+| `accept` | draft | planned | a person (`work.people`) |
+| `start` | planned | working | |
+| `ask` | working | blocked | the question in the body |
+| `answer` | blocked | working | a person |
+| `submit` | working | review | evidence: a pr, commit, check or diff |
+| `rework` | review | working | |
+| `merge` | review | implemented | a commit in the evidence |
+| `verify` | implemented | verified | a fresh rule check at the page's `sourceRevision` |
+| `reopen` | implemented, verified | working | |
+| `drop` | draft, planned, working, review | dropped | the reason in the body |
+| `note` | any | (stays) | |
+
+`stale` is never written. The reader shows an implemented or verified page as
+stale when one of its `sources` changed in the checkout after its
+`sourceRevision`. A project may add needs to an event under `work.require`
+(any of `question`, `reason`, `evidence`, `commit`, `pr`, `check`,
+`modelCheck`). It can never add, remove or rename a state or an event.
+
+### The plan: a work block
+
+```yaml
+work:
+  - id: timeout-cleanup
+    title: Clean up when a start times out
+    anchor: { diagram: 0, edge: { from: Starting, to: Cleaning, label: timed out } }
+    dependsOn: [start-it]
+```
+
+`id` is a kebab-case id unique on the page. `title` is one line. `anchor`
+selects a `node`, or an `edge` with its exact label, in the page's Mermaid
+diagram number `diagram`, exactly as `diagramDetails` does. An anchor that
+names nothing is a Health warning and the task is listed but not drawn.
+`dependsOn` names other tasks on the same page. A malformed block rejects the
+page like any bad field.
+
+### The progress: one record per change
+
+Each change of state is a new Markdown file. A page record sits at
+`docs/state/work/<page>/<file>.md`; a task record at
+`docs/state/work/<page>/<task>/<file>.md`. Name the file
+`<at, with ":" as "-">-<by>.md`, such as `2026-11-10T07-40-00Z-codex.md`, so
+two agents never write the same file.
+
+```markdown
+---
+page: run-a-background-command
+task: timeout-cleanup
+event: submit
+state: review
+at: 2026-11-10T07:40:00Z
+by: codex
+model: <model id>          # optional, when the agent knows it
+sourceRevision: "<full commit the agent was on>"   # optional
+evidence:
+  - pr: https://github.com/org/repo/pull/123
+  - commit: "<full commit id>"
+  - check: npm test
+  - diff: src/runner.ts
+---
+Cleanup now runs when a start times out. The PR is open for review.
+```
+
+`page` and `task` repeat the folders the file sits in. `event` is one of the
+events above and `state` is where it leads (for `note`, the current state).
+`at` is UTC. `by` names who wrote it, in lowercase. The body is a sentence or
+two; for `ask` it is the question, and for `drop` the reason. Unknown fields
+are refused. Records under `docs/state/work` are never pages.
+
+### How records are judged
+
+The reader replays a page's records oldest first (by `at`, then file path)
+through the lifecycle. A record that cannot be read is `invalid-record`; one
+for a page or task that does not exist is `unknown-work-page` or
+`unknown-work-task`; one the lifecycle does not allow from the current state,
+or that lacks what its event needs, is `refused-record`. All are errors in
+Health and in `validate:docs`, and none of them moves a box. Fix a mistake with
+a newer record, never by editing the old one.
+
+A task starts in `draft` and becomes `planned` when its page is accepted; until
+then a task can only be dropped or noted. A page with tasks follows them: its own records may only `accept`, `drop`,
+`verify` or `note` it. It is `blocked` while any task is blocked, `review`
+only when every task that is not dropped is in review or finished, and
+`implemented` only when all of them are implemented. A page with no tasks
+moves on its own records. A person's move (`accept`, `answer`) is accepted only
+when `by` is listed in `work.people` and the record names no `model`. A file
+cannot prove who wrote it, so this is a rule the project keeps by review; a
+project that needs more can require signed commits.
+
+The reader shows how old the newest record is. After `work.quietAfter`
+(default 2h) open work is drawn as quiet: the record says what was last
+written, never that an agent is still running.

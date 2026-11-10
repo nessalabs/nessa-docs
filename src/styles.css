@@ -1841,6 +1841,9 @@ figure {
   font-size: 22px;
   line-height: 1.25;
 }
+.document-header[data-compact] .document-meta > :not(.document-summary-inline) {
+  flex: none;
+}
 .document-header[data-compact] .document-meta {
   flex-wrap: nowrap;
   margin-top: 4px;
@@ -2150,4 +2153,122 @@ figure {
 .peek-truncated {
   color: var(--muted);
   font-size: var(--text-small);
+}
+
+/* Work: a task's state from its records (server/work.ts). Colours reuse the
+   state roles, so a colour means the same here as in a lifecycle card. */
+[data-work-state='draft'],
+[data-work-state='planned'] { --work: var(--role-start); }
+[data-work-state='working'] { --work: var(--role-working); }
+[data-work-state='blocked'],
+[data-work-state='review'] { --work: var(--role-waiting); }
+[data-work-state='implemented'],
+[data-work-state='verified'] { --work: var(--role-done); }
+[data-work-state='dropped'] { --work: var(--role-ended); }
+[data-work-state='stale'] { --work: var(--role-uncertain); }
+
+.diagram-svg [data-work-state] :is(rect, polygon, circle, ellipse, path),
+.diagram-svg path[data-work-state] {
+  stroke: var(--work) !important;
+  stroke-width: 3px !important;
+}
+.diagram-svg [data-work-state='blocked'] :is(rect, polygon, circle, ellipse, path) {
+  stroke-dasharray: 6 4 !important;
+}
+.diagram-svg [data-work-quiet] :is(rect, polygon, circle, ellipse, path),
+.diagram-svg path[data-work-quiet] {
+  stroke-opacity: 0.45 !important;
+}
+
+.row-work {
+  flex: none;
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--work) 55%, transparent);
+  color: var(--work);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.meta-work {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.work-view {
+  display: grid;
+  gap: 16px;
+  max-width: 760px;
+}
+.work-summary,
+.work-task-head,
+.work-record-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+}
+.work-summary { color: var(--muted); font-size: var(--text-ui); }
+.work-tasks,
+.work-records {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.work-task,
+.work-record {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--rim);
+  border-radius: var(--radius-row);
+}
+.work-task-title { font-weight: 600; }
+.work-task-meta,
+.work-record-file {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-small);
+}
+.work-question,
+.work-note,
+.work-record-refused {
+  margin: 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--warn);
+  font-size: var(--text-ui);
+}
+.work-record[data-refused] { border-color: color-mix(in oklab, var(--warn) 60%, transparent); }
+.work-record-head { font-size: var(--text-small); color: var(--muted); }
+.work-record-by,
+.work-record-move { color: var(--foreground); font-weight: 600; }
+.work-record-body { display: grid; gap: 6px; }
+.work-record-body p { margin: 0; }
+.work-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-small);
+}
+.work-heading { margin: 8px 0 0; font-size: var(--text-ui); color: var(--muted); }
+.work-legend-title { font-weight: 600; }
+.work-swatch {
+  width: 12px;
+  height: 10px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 2px var(--work);
 }

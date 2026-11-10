@@ -1,0 +1,6 @@
+version: 1
+
+work:
+  # Who may make a person's move (accept, answer).
+  people: [saurav]
+  quietAfter: 2h

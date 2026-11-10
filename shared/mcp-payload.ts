@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { CARD_FAMILIES, DOCUMENT_KINDS, DOCUMENT_STATUSES } from './api.js';
 import { MAX_PATTERN_LENGTH, MAX_REFERENCE_RULES } from './references.js';
 import { BROKEN_RULE_LIMITS } from './model-check.js';
+import { LIFECYCLE_EVENTS, LIFECYCLE_STATES } from './lifecycle.js';
 import type { BundleSnapshot } from './mcp.js';
 const id = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 const sentence = z.string().min(1).max(BROKEN_RULE_LIMITS.sentence);
@@ -14,9 +15,11 @@ const modelCheck = z.object({
   states: z.number().int().nonnegative(), held: z.array(z.string()), broke: z.array(brokenRule), unchecked: z.array(z.string()),
   stop: z.enum(['states', 'time']).optional(),
 }).strict();
+const lifecycleState = z.enum(LIFECYCLE_STATES);
+const workSummary = z.object({ state: z.enum([...LIFECYCLE_STATES, 'stale']), lastRecordAt: z.string().nullable(), tasks: z.number().int().nonnegative(), open: z.number().int().nonnegative(), blocked: z.number().int().nonnegative(), refused: z.number().int().nonnegative() }).strict();
 const summary = z.object({
   id, title: z.string(), kind: z.enum(DOCUMENT_KINDS), status: z.enum(DOCUMENT_STATUSES), summary: z.string(), parent: id.nullable(), children: z.array(id), file: z.string(), sourceRevision: z.string().optional(),
-  model: modelLink.optional(), modelCheck: modelCheck.optional(), modelCheckStale: z.boolean().optional(),
+  model: modelLink.optional(), modelCheck: modelCheck.optional(), modelCheckStale: z.boolean().optional(), work: workSummary.optional(),
 }).strict();
 const crumb = z.object({ id, title: z.string() });
 const fragment = z.string().nullable();
@@ -33,12 +36,23 @@ const detail = z.object({ diagram: z.number().int().nonnegative(), family: z.enu
   z.object({ kind: z.literal('node'), node: z.string() }),
   z.object({ kind: z.literal('edge'), from: z.string(), to: z.string(), label: z.string(), element: z.string() }),
 ]) });
+const elementTarget = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('node'), node: z.string() }).strict(),
+  z.object({ kind: z.literal('edge'), from: z.string(), to: z.string(), label: z.string(), element: z.string() }).strict(),
+]);
+const evidence = z.object({ kind: z.enum(['pr', 'commit', 'check', 'diff']), value: z.string().max(300) }).strict();
+const workRecord = z.object({
+  file: z.string(), task: id.nullable(), event: z.enum(LIFECYCLE_EVENTS), state: lifecycleState, at: z.string(), by: z.string(), model: z.string().optional(), sourceRevision: z.string().optional(),
+  evidence: z.array(evidence), body: z.string().max(4000), refused: z.string().nullable(),
+}).strict();
+const workTask = z.object({ id, title: z.string(), anchor: z.object({ diagram: z.number().int().nonnegative(), target: elementTarget }).strict().nullable(), dependsOn: z.array(id), state: lifecycleState, lastRecordAt: z.string().nullable(), lastBy: z.string().nullable() }).strict();
+const pageWork = z.object({ summary: workSummary, recorded: lifecycleState, tasks: z.array(workTask), records: z.array(workRecord), quietAfterMs: z.number().positive() }).strict();
 const preview = z.object({ title: z.string().max(500), body: z.string().max(65536), truncated: z.boolean(), links: z.record(z.string(), target), file: z.string() }).strict();
 const reference = z.object({ rule: z.string(), label: z.string().max(500), target, preview: preview.nullable() }).strict();
 const card = z.object({ name: z.string(), look: z.enum(['lifecycle', 'handoff', 'map', 'plain']), family: z.enum(CARD_FAMILIES), label: z.string().max(60) }).strict();
 const rule = z.object({ name: z.string(), match: z.string().max(MAX_PATTERN_LENGTH) }).strict();
 const response = z.object({ version: z.string(), document: summary, body: z.string().max(65536), links: z.record(z.string(), target), sources: z.array(z.object({ raw: z.string(), target })), diagramLinks: z.record(z.string(), crumb), diagramDetails: z.array(detail), breadcrumbs: z.array(crumb), children: z.array(summary), issues: z.array(issue),
-  referenceRules: z.array(rule).max(MAX_REFERENCE_RULES), references: z.record(z.string(), reference), cards: z.record(z.string(), card) });
+  referenceRules: z.array(rule).max(MAX_REFERENCE_RULES), references: z.record(z.string(), reference), cards: z.record(z.string(), card), work: pageWork.nullable() });
 const bundleFile = z.union([z.object({ path: z.string(), markdown: z.string().max(65536) }).strict(), z.object({ path: z.string(), text: z.string().max(65536) }).strict()]);
 export const snapshotSchema = z.object({ storage: z.discriminatedUnion('kind', [z.object({kind:z.literal('memory')}), z.object({kind:z.literal('durable'),status:z.enum(['synced','unconfirmed']),projectPath:z.string()})]), files: z.array(bundleFile).min(1).max(MAX_BUNDLE_FILES), scope: z.uuid(), revision: z.number().int().positive(), catalog: z.object({ version: z.string(), rootId: id, documents: z.array(summary).min(1).max(MAX_BUNDLE_FILES), issues: z.array(issue) }), documents: z.array(response).min(1).max(MAX_BUNDLE_FILES) });
 
