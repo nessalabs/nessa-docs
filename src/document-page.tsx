@@ -22,7 +22,8 @@ import { collectDiagrams, collectHeadings, type FenceCard, type Heading, Markdow
 import { AppLink, documentPath, navigate, scrollToHash, useSearchAndHash } from './router';
 import { Titlebar } from './shell';
 import { plainText } from '../shared/markdown';
-import { DocumentStatusLabel, IconButton, QuietButton, SegmentedControl, SegmentedControlOption } from './ui';
+import { DocumentStatusLabel, IconButton, QuietButton, SegmentedControl, SegmentedControlOption, WorkStateLabel } from './ui';
+import { isQuiet, type WorkMark, workMarks, WorkView } from './work-view';
 import { RuleBadge, RuleCheckControls, RulePath, ruleVerification, useRuleDisclosure } from './rule-check';
 import type { ProjectReads } from './project-opening/read-port';
 import { useEscapeLayer } from './layers';
@@ -157,7 +158,7 @@ export function DocumentPage(props: { id: string; catalogVersion: string; onStal
   );
 }
 
-type View = 'diagrams' | 'details';
+type View = 'diagrams' | 'details' | 'work';
 
 /** Plain text compared without differences in spacing or a final full stop. */
 function comparable(text: string): string {
@@ -188,16 +189,29 @@ export function opensWithSummary(tokens: readonly Token[], summary: string): boo
  * Diagrams first: a page with charts opens on them, captioned by their
  * sections, with the full Markdown one click away in Details
  * (`?view=details`). A link to a section (`#anchor`) opens Details. A page
- * without charts is Details. Any other `view` value is not a view.
+ * without charts is Details. A page with tasks or records also has Work
+ * (`?view=work`). Any other `view` value is not a view.
  */
-export function chooseView(search: string, hash: string, hasDiagrams: boolean): View {
-  if (!hasDiagrams) return 'details';
+export function chooseView(search: string, hash: string, hasDiagrams: boolean, hasWork = false): View {
   const requested = new URLSearchParams(search).get('view');
+  if (requested === 'work' && hasWork) return 'work';
+  if (!hasDiagrams) return 'details';
   if (requested === 'details' || requested === 'diagrams') return requested;
   return hash.length > 1 ? 'details' : 'diagrams';
 }
 
 const NO_DETAILS: readonly DiagramDetailEntry[] = [];
+const NO_WORK_MARKS: readonly WorkMark[] = [];
+
+/** The time, refreshed each minute, so a record's age and the quiet mark keep up while a page stays open. */
+function useNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return now;
+}
 
 function locationParts(searchAndHash: string): { search: string; hash: string } {
   const hashAt = searchAndHash.indexOf('#');
@@ -234,14 +248,17 @@ function DocumentView({ response, focusOnLoad, onChecked, pending }: { response:
     return { all, sections: markdownSections(all), tokens: body, ...collected, diagrams: collectDiagrams(body, collected.slugs) };
   }, [response.body, document.title]);
 
-  const view = chooseView(search, hash, diagrams.length > 0);
+  const work = response.work;
+  const view = chooseView(search, hash, diagrams.length > 0, work !== null);
+  const now = useNow();
+  const marks = useMemo(() => workMarks(work, now), [work, now]);
   const detailsHref = useCallback(
     (slug?: string) => `${documentPath(document.id)}?view=details${slug ? `#${encodeURIComponent(slug)}` : ''}`,
     [document.id],
   );
   const setView = (next: View) => {
     if (pending || next === view) return;
-    navigate(next === 'details' ? detailsHref() : `${documentPath(document.id)}?view=diagrams`);
+    navigate(next === 'details' ? detailsHref() : `${documentPath(document.id)}?view=${next}`);
   };
 
   // The details inspector (design table in verification/CHECKLIST.md, "Diagram details").
@@ -370,6 +387,7 @@ function DocumentView({ response, focusOnLoad, onChecked, pending }: { response:
       revealLeftOf={selection?.detail.diagram === index && !narrow ? paneLeft : null}
       ruleMarks={ruleMarks}
       onSelectRule={setRuleNode}
+      workMarks={marks.get(index) ?? NO_WORK_MARKS}
     />
     );
   };
@@ -427,20 +445,27 @@ function DocumentView({ response, focusOnLoad, onChecked, pending }: { response:
   const bodyOpensWithSummary = opensWithSummary(tokens, document.summary);
   const childList = children.length > 0 ? <ChildList items={children} /> : null;
   const viewSwitch =
-    diagrams.length > 0 ? (
+    diagrams.length > 0 || work !== null ? (
       <SegmentedControl
         variant="glass"
         value={view}
-        onValueChange={(value) => setView(value === 'details' ? 'details' : 'diagrams')}
+        onValueChange={(value) => setView(value === 'details' || value === 'work' ? value : 'diagrams')}
         aria-label="View"
         className="view-switch"
       >
-        <SegmentedControlOption value="diagrams" data-view="diagrams">
-          Diagrams
-        </SegmentedControlOption>
+        {diagrams.length > 0 ? (
+          <SegmentedControlOption value="diagrams" data-view="diagrams">
+            Diagrams
+          </SegmentedControlOption>
+        ) : null}
         <SegmentedControlOption value="details" data-view="details">
           Details
         </SegmentedControlOption>
+        {work !== null ? (
+          <SegmentedControlOption value="work" data-view="work">
+            Work
+          </SegmentedControlOption>
+        ) : null}
       </SegmentedControl>
     ) : null;
 
@@ -474,6 +499,11 @@ function DocumentView({ response, focusOnLoad, onChecked, pending }: { response:
             <p className="document-meta">
               <span className="document-kind">{KIND_SINGULAR[document.kind]}</span>
               <DocumentStatusLabel status={document.status} />
+              {work !== null ? (
+                <button type="button" className="meta-work" onClick={() => setView('work')} title="Open the Work view">
+                  <WorkStateLabel state={work.summary.state} quiet={isQuiet(work.summary.state, work.summary.lastRecordAt, work.quietAfterMs, now)} />
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="meta-revision"
@@ -505,7 +535,9 @@ function DocumentView({ response, focusOnLoad, onChecked, pending }: { response:
             <RulePath rules={ruleMarks.get(ruleNode ?? '') ?? []} />
           </header>
 
-          {view === 'diagrams' ? (
+          {view === 'work' && work !== null ? (
+            <WorkView work={work} now={now} />
+          ) : view === 'diagrams' ? (
             <>
               <div className="diagram-view">{diagrams.map((diagram, index) => chart(index, diagram.source, true, diagram.section, diagram))}</div>
               {childList}
@@ -670,6 +702,7 @@ function ChildList({ items }: { items: readonly DocumentSummary[] }) {
                   ) : null}
                   <span className="child-meta">
                     {child.children.length > 0 ? <span className="child-count">{child.children.length}</span> : null}
+                    {child.work ? <WorkStateLabel state={child.work.state} className="status-compact" title={`Work: ${child.work.state}`} /> : null}
                     <DocumentStatusLabel status={child.status} className="status-compact" title={child.status} />
                   </span>
                   <ChevronRight aria-hidden="true" className="child-chevron" />

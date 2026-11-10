@@ -14,6 +14,10 @@ import { findElement } from './diagram-details.js';
 import type { DiagramReader, DiagramReading } from './diagram-reader.js';
 import { type AuthoredTask, isDocumentId, readFrontmatter } from './document.js';
 import { WORKER_NAME, type WorkConfig } from './project-config.js';
+import { textCache } from '../shared/memo.js';
+
+// Every request reloads the catalog; a record's YAML depends only on its text, so it is read once.
+const frontmatters = textCache<ReturnType<typeof readFrontmatter>>(16 * 1024 * 1024);
 
 export const WORK_DIRECTORY = 'docs/state/work';
 
@@ -78,7 +82,7 @@ function oneLine(value: unknown, most: number): value is string {
 export function parseRecord(file: string, text: string, now: number): ParsedRecord | string[] {
   const location = recordLocation(file);
   if (typeof location === 'string') return [location];
-  const read = readFrontmatter(text);
+  const read = frontmatters.get(text) ?? frontmatters.set(text, readFrontmatter(text));
   if (read.kind === 'rejected') return read.problems.map((problem) => problem.message);
   const fields = read.fields;
   const problems: string[] = [];
@@ -220,6 +224,8 @@ export function replayPage(page: WorkPage, records: readonly ParsedRecord[], con
     let refused: string | null = null;
     if (record.task !== null && !task) refused = `the page plans no task "${record.task}"`;
     else if (task && pageState() === 'dropped' && record.event !== 'note') refused = 'the page was dropped';
+    // A task moves only once its page's plan is accepted; until then it can only be dropped from the draft.
+    else if (task && own === 'draft' && record.event !== 'note' && record.event !== 'drop') refused = 'the page\'s plan is not accepted yet; a person accepts the page first';
     else if (!task && hasTasks && !PAGE_OWN_EVENTS.has(record.event)) refused = `this page follows its tasks; write "${record.event}" on a task, not the page`;
     else if (!rule.from.includes(current)) refused = `"${record.event}" is not allowed from ${current}; it is allowed from ${rule.from.join(', ')}`;
     else if (record.state !== (rule.to ?? current)) refused = `"${record.event}" from ${current} leads to ${rule.to ?? current}, but the record says ${record.state}`;

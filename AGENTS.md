@@ -27,6 +27,10 @@ for the included store project. For development, run `npm run dev:api` and
   local browser.
 - `server/mcp/`, `shared/mcp*`, and `src/mcp/` own the MCP bundle, protocol,
   and embedded explorer. Memory mode is the default; durable storage is opt-in.
+- Work tracking: `skills/nessa-docs/references/lifecycle.json` is the only list
+  of work states and events. `server/work.ts` reads and replays records against
+  it; the browser only draws the result (`src/work-view.tsx`). A project adds
+  needs in `nessa-docs.yaml`, never states.
 - `examples/` and `fixtures/` are synthetic inputs. Use these for UI and MCP
   verification, not someone else's documents.
 

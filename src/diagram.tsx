@@ -11,7 +11,8 @@ import { checkBuild, isUnloading, reloadOnceFor } from './build';
 import { useEscapeLayer } from './layers';
 import { attachCanvasGestures, type CanvasHost, MAX_SCALE, MIN_SCALE, zoomAround } from './canvas-gestures';
 import { AppLink, documentPath, navigate } from './router';
-import { IconButton, QuietButton } from './ui';
+import { IconButton, QuietButton, WORK_TEXT } from './ui';
+import type { WorkMark } from './work-view';
 
 type MermaidApi = typeof import('mermaid').default;
 
@@ -385,6 +386,7 @@ const ROLE_NAMES: Readonly<Record<StateRole, string>> = {
   start: 'Start', working: 'Working', waiting: 'Waiting', done: 'Done', refused: 'Refused', uncertain: 'Uncertain', ended: 'Ended',
 };
 const ROLE_SET = new Set<string>(STATE_ROLES);
+const NO_WORK: readonly WorkMark[] = [];
 
 /** The state roles a chart tags (`class A,B waiting` or `A:::waiting`), in the fixed role order. */
 export function rolesUsed(source: string): StateRole[] {
@@ -412,6 +414,7 @@ export function Diagram({
   revealLeftOf = null,
   ruleMarks,
   onSelectRule,
+  workMarks = NO_WORK,
 }: {
   source: string;
   links: Readonly<Record<string, Crumb>>;
@@ -436,6 +439,8 @@ export function Diagram({
   /** Diagram node id → rules that fail in that state. */
   ruleMarks?: ReadonlyMap<string, readonly { rule: string; path: readonly string[] }[]>;
   onSelectRule?: (nodeId: string) => void;
+  /** Tasks anchored to this chart's elements, with the state their records lead to. */
+  workMarks?: readonly WorkMark[];
 }) {
   const navigateDocument = useRef(onNavigateDocument);
   navigateDocument.current = onNavigateDocument;
@@ -650,6 +655,37 @@ export function Diagram({
       container.innerHTML = '';
     };
   }, [state, links, details, ruleMarks]);
+
+  // A task's state outlines the box or arrow it is anchored to. Only attributes
+  // change here, so a new age (the quiet mark) never re-binds the SVG.
+  useLayoutEffect(() => {
+    const svg = host.current?.querySelector('svg');
+    if (state.kind !== 'rendered' || !svg) return;
+    const nodes = nodeElements(svg, state.renderId);
+    const marked: Element[] = [];
+    for (const mark of workMarks) {
+      const target = mark.target;
+      const elements = target.kind === 'node'
+        ? (nodes.get(target.node) ?? [])
+        : byDataId(svg, target.element).flatMap((element) => (element.tagName.toLowerCase() === 'path' ? [element] : element.parentElement?.classList.contains('edgeLabel') && element.parentElement ? [element.parentElement] : []));
+      for (const element of elements) {
+        element.setAttribute('data-work-state', mark.state);
+        element.toggleAttribute('data-work-quiet', mark.quiet);
+        const title = document.createElementNS(SVG_NS, 'title');
+        title.setAttribute('data-work-title', '');
+        title.textContent = `${mark.title}: ${WORK_TEXT[mark.state]}${mark.quiet ? ', quiet' : ''}`;
+        element.prepend(title);
+        marked.push(element);
+      }
+    }
+    return () => {
+      for (const element of marked) {
+        element.removeAttribute('data-work-state');
+        element.removeAttribute('data-work-quiet');
+        element.querySelector(':scope > title[data-work-title]')?.remove();
+      }
+    };
+  }, [state, links, details, ruleMarks, workMarks]);
 
   // The open detail is marked in place; selection never re-renders the SVG.
   useLayoutEffect(() => {
@@ -925,6 +961,17 @@ export function Diagram({
           <div ref={host} className="diagram-svg" />
         </div>
       )}
+      {workMarks.length > 0 ? (
+        <ul className="role-legend work-legend" aria-label="Work on this chart">
+          <li className="work-legend-title">Work</li>
+          {[...new Set(workMarks.map((mark) => mark.state))].map((state) => (
+            <li key={state} data-work-state={state}>
+              <span className="work-swatch" aria-hidden="true" />
+              {WORK_TEXT[state]}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {roles.length > 0 ? (
         <ul className="role-legend" aria-label="State roles">
           {roles.map((role) => (

@@ -7,6 +7,7 @@ import { Input } from '@nessa-ui/react/input';
 import { StatusLabel, type StatusLabelTone } from '@nessa-ui/react/status-label';
 import { SegmentedControl, SegmentedControlOption } from '@nessa-ui/react/segmented-control';
 import type { DocumentStatus } from '../shared/api';
+import type { ShownState } from '../shared/lifecycle';
 
 export { Button, Input, SegmentedControl, SegmentedControlOption };
 
@@ -54,6 +55,40 @@ export function DocumentStatusLabel({ status, ...props }: { status: DocumentStat
   return (
     <StatusLabel tone={STATUS_TONE[status]} data-status={status} {...props}>
       {STATUS_TEXT[status]}
+    </StatusLabel>
+  );
+}
+
+const WORK_TONE: Record<ShownState, StatusLabelTone> = {
+  draft: 'neutral',
+  planned: 'neutral',
+  working: 'active',
+  blocked: 'warning',
+  review: 'active',
+  implemented: 'good',
+  verified: 'good',
+  dropped: 'neutral',
+  stale: 'bad',
+};
+
+export const WORK_TEXT: Record<ShownState, string> = {
+  draft: 'Draft',
+  planned: 'Planned',
+  working: 'Working',
+  blocked: 'Blocked',
+  review: 'In review',
+  implemented: 'Implemented',
+  verified: 'Verified',
+  dropped: 'Dropped',
+  stale: 'Stale',
+};
+
+/** Where a page's or task's work is, from its records. `quiet`: open work with no record for a while. */
+export function WorkStateLabel({ state, quiet = false, ...props }: { state: ShownState; quiet?: boolean } & Omit<ComponentProps<'span'>, 'children'>) {
+  return (
+    <StatusLabel tone={WORK_TONE[state]} data-work-state={state} data-quiet={quiet ? '' : undefined} {...props}>
+      {WORK_TEXT[state]}
+      {quiet ? ' · quiet' : ''}
     </StatusLabel>
   );
 }

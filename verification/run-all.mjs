@@ -24,6 +24,7 @@ import { runJourneys } from './journeys.mjs';
 import { runNavigation } from './navigation.mjs';
 import { runRealData } from './real-data.mjs';
 import { runSourceRevision } from './source-revision.mjs';
+import { runWork } from './work.mjs';
 import { runResponsive } from './responsive.mjs';
 import { runSettings } from './settings.mjs';
 import { runSidebarResize } from './sidebar-resize.mjs';
@@ -46,6 +47,8 @@ const staleA = process.env.STALE_BUILD_A || null;
 for (const engine of ['chromium', 'webkit']) {
   const revision = await runSourceRevision(engine);
   summary.push({ engine, script: revision.script, scope: 'fixture', ok: revision.ok, passed: revision.passed, total: revision.total });
+  const work = await runWork(engine);
+  summary.push({ engine, script: work.script, scope: 'fixture', ok: work.ok, passed: work.passed, total: work.total });
   process.env.BASE_URL = welcome;
   const onboarding = await runOnboarding(engine);
   summary.push({ engine, script: onboarding.script, scope: 'package', baseUrl: welcome, ok: onboarding.ok, passed: onboarding.passed, total: onboarding.total });

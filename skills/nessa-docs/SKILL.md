@@ -98,6 +98,39 @@ distinct when the code does. Do not force independent lifecycles into one large
 application state. Avoid a box for every function or field. Use
 `event [condition] / action` on state arrows when those parts matter.
 
+## Track work
+
+Track non-trivial work on the page it changes, so the person sees progress on
+the chart itself. The plan is a `work` block on that page. Progress is one new
+record file per change of state, committed with the code. The states and the
+moves between them are fixed by [lifecycle.json](references/lifecycle.json);
+[the format](references/format.md#tracking-work) owns the fields.
+
+1. **Plan when it is worth it.** Work that takes more than one change gets a
+   `work` block on the owning page, or a draft page of its own. A one-line fix
+   does not.
+2. **Anchor, don't invent.** Each task points at a box or arrow that already
+   exists in the page's chart. If it does not exist yet, add it to the chart
+   first, as the design you are building.
+3. **Read the records first.** At the start of a session, read
+   `docs/state/work/<page>/` and carry on from the newest record of each task,
+   even when another agent wrote it.
+4. **Add, never edit.** Each change of state is a new file. Fix a wrong record
+   with a newer one. Never edit or delete an old record.
+5. **Write on a change of state, not on every step.** Use `note` only when
+   something worth knowing landed without moving the task.
+6. **Only a person accepts or answers.** `accept` and `answer` are the
+   person's moves. Write one only to record what the person said, with their
+   words in the body, and never with a `model`.
+7. **Blocked means a question.** An `ask` record's body is the question, the
+   options and your recommendation.
+8. **Finished means evidence.** `submit` names the PR or diff; `merge` names the
+   commit that landed. Stamp the page's `sourceRevision` as usual when the work
+   lands.
+9. **Check and commit together.** Run `validate:docs`. A refused record is an
+   error that names the rule it broke. Commit the records on the same branch as
+   the code they describe.
+
 ## Write for the first reader
 
 Write in simple technical English: familiar verbs, explicit actors and one

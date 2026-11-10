@@ -30,3 +30,19 @@ it('preserves authored special keys and still rejects an unsafe value under them
   Object.defineProperty(unsafe.documents[0]!.links, '__proto__', { value: { kind: 'external', url: 'javascript:alert(1)' }, enumerable: true, configurable: true });
   expect(() => readSnapshot(unsafe)).toThrow();
 });
+
+it('carries a page\'s tasks and records through a bundle to the explorer', async () => {
+  const chart = '```mermaid\nflowchart LR\n  Plan --> Build\n```\n';
+  const files = [
+    { path: 'docs/state/README.md', markdown: doc('system', null, { work: [{ id: 'build', title: 'Build it', anchor: { diagram: 0, node: 'Build' } }] }, chart) },
+    { path: 'docs/state/nessa-docs.yaml', text: 'work:\n  people: [saurav]\n' },
+    { path: 'docs/state/work/system/2026-01-01T00-00-00Z-saurav.md', markdown: '---\npage: system\nevent: accept\nstate: planned\nat: 2026-01-01T00:00:00Z\nby: saurav\n---\nAccepted.\n' },
+    { path: 'docs/state/work/system/build/2026-01-01T01-00-00Z-codex.md', markdown: '---\npage: system\ntask: build\nevent: start\nstate: working\nat: 2026-01-01T01:00:00Z\nby: codex\n---\nStarted.\n' },
+  ];
+  const snapshot = await new DocumentBundle().replace({ expectedRevision: 0, files });
+  const root = readSnapshot(snapshot).documents[0]!;
+  expect(root.document.work).toMatchObject({ state: 'working', tasks: 1, open: 1 });
+  expect(root.work?.tasks[0]).toMatchObject({ id: 'build', state: 'working', anchor: { diagram: 0, target: { kind: 'node', node: 'Build' } } });
+  expect(root.work?.records.map((record) => record.event)).toEqual(['accept', 'start']);
+  expect(snapshot.catalog.issues).toEqual([]);
+});

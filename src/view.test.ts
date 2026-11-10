@@ -19,6 +19,12 @@ describe('chooseView', () => {
   it('always shows Details for a page without diagrams', () => {
     expect(chooseView('?view=diagrams', '', false)).toBe('details');
   });
+  it('opens Work only on a page that has tasks or records', () => {
+    expect(chooseView('?view=work', '', true, true)).toBe('work');
+    expect(chooseView('?view=work', '', false, true)).toBe('work');
+    expect(chooseView('?view=work', '', true, false)).toBe('diagrams');
+    expect(chooseView('?view=work', '', false, false)).toBe('details');
+  });
 });
 
 // Details shows the header summary unless the body's own first paragraph already says it: the whole paragraph, or

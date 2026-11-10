@@ -165,7 +165,7 @@ export async function loadCatalog(
         } else {
           await walk(childAbsolute, childRelative, depth + 1);
         }
-      } else if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.md') && (childRelative + '/').startsWith(`${WORK_DIRECTORY}/`)) {
+      } else if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.md') && childRelative.startsWith(`${WORK_DIRECTORY}/`)) {
         recordCount += 1;
         if (recordCount > limits.maxFiles) {
           if (recordCount === limits.maxFiles + 1) issue(WORK_DIRECTORY, 'too-many-files', `more than ${limits.maxFiles} work records; the rest were not read`);
@@ -186,30 +186,25 @@ export async function loadCatalog(
   await walk(state.realPath, STATE_DIRECTORY, 0);
 
   // Read the files found, several at a time (the reads are independent), keeping walk order.
-  const reads = new Array<Awaited<ReturnType<RepositoryFiles['readText']>>>(found.length);
+  const toRead = [...found, ...recordsFound];
+  const reads = new Array<Awaited<ReturnType<RepositoryFiles['readText']>>>(toRead.length);
   let next = 0;
-  await Promise.all(Array.from({ length: Math.min(READ_CONCURRENCY, found.length) }, async () => {
-    while (next < found.length) {
+  await Promise.all(Array.from({ length: Math.min(READ_CONCURRENCY, toRead.length) }, async () => {
+    while (next < toRead.length) {
       const at = next++;
-      reads[at] = await files.readText((found[at] as { absolute: string }).absolute, limits.maxBytes, state.realPath);
+      reads[at] = await files.readText((toRead[at] as { absolute: string }).absolute, limits.maxBytes, state.realPath);
     }
   }));
-  found.forEach(({ file }, at) => {
+  const recordTexts: { file: string; text: string }[] = [];
+  toRead.forEach(({ file }, at) => {
     const read = reads[at] as Awaited<ReturnType<RepositoryFiles['readText']>>;
-    if (read.kind === 'text') texts.push({ file, text: read.text });
+    if (read.kind === 'text') (at < found.length ? texts : recordTexts).push({ file, text: read.text });
     else if (read.kind === 'too-large') {
       issue(file, 'file-too-large', `${read.size} bytes exceeds the ${limits.maxBytes}-byte limit`);
     } else {
       issue(file, 'unreadable-file', `could not be read: ${read.reason}`);
     }
   });
-
-  const recordTexts: { file: string; text: string }[] = [];
-  for (const { file, absolute } of recordsFound) {
-    const read = await files.readText(absolute, limits.maxBytes, state.realPath);
-    if (read.kind === 'text') recordTexts.push({ file, text: read.text });
-    else issue(file, read.kind === 'too-large' ? 'file-too-large' : 'unreadable-file', read.kind === 'too-large' ? `${read.size} bytes exceeds the ${limits.maxBytes}-byte limit` : `could not be read: ${read.reason}`);
-  }
 
   const version = createHash('sha256');
   for (const { file, text } of texts) version.update(file).update('\0').update(text).update('\0');
@@ -475,7 +470,12 @@ export async function loadCatalog(
     if (parent !== null) children.set(parent, [...(children.get(parent) ?? []), candidate.parsed.id]);
   }
   // Work: replay each page's records and bind its task anchors.
-  const recordsByPage = readRecords(recordTexts, new Set(accepted.map((candidate) => candidate.parsed.id)), now, (file, code, message, documentId) => issue(file, code, message, documentId));
+  // A record that cannot be read is listed on its page too, so the page says it has a problem.
+  const candidateById = new Map(accepted.map((candidate) => [candidate.parsed.id, candidate]));
+  const recordsByPage = readRecords(recordTexts, new Set(candidateById.keys()), now, (file, code, message, documentId) => {
+    const entry = issue(file, code, message, documentId);
+    if (documentId !== null) candidateById.get(documentId)?.warnings.push(entry);
+  });
   const workById = new Map<string, PageWork>();
   for (const candidate of ordered) {
     const { id, work: tasks, body, sourceRevision, sources, model, modelCheck } = candidate.parsed;

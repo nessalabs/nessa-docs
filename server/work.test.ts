@@ -125,8 +125,11 @@ describe('replaying records through the lifecycle', () => {
 
   it('refuses work before the person accepts the plan', async () => {
     const catalog = await load([{ task: 'start-it', event: 'start', state: 'working', at: '2026-11-10T09:00:00Z' }]);
-    expect(catalog.issues.find((issue) => issue.code === 'refused-record')?.message).toBe('"start" is not allowed from draft; it is allowed from planned');
+    expect(catalog.issues.find((issue) => issue.code === 'refused-record')?.message).toBe('the page\'s plan is not accepted yet; a person accepts the page first');
     expect(catalog.documents.get('run')?.summary.work?.state).toBe('draft');
+    // Not even a person can accept one task ahead of the page.
+    const early = await load([{ task: 'start-it', event: 'accept', state: 'planned', at: '2026-11-10T07:00:00Z', by: 'saurav' }]);
+    expect(early.issues.find((issue) => issue.code === 'refused-record')?.message).toMatch(/plan is not accepted yet/);
   });
 
   it('only lets a listed person accept or answer, and never with a model', async () => {
