@@ -39,9 +39,9 @@ export function diagramReading({ mermaid, document }) {
 
   /** The text a reader sees for a label Mermaid stored as (sanitised) HTML. */
   function shownText(html) {
-    const element = document.createElement('div');
-    element.innerHTML = html;
-    return element.textContent ?? '';
+    // Parsed into a detached document: nothing in it runs or loads.
+    const parsed = new document.defaultView.DOMParser().parseFromString(html, 'text/html');
+    return parsed.body.textContent ?? '';
   }
 
   /** How Mermaid stores `text` written as a label of this family and type, or null if it cannot be one. */

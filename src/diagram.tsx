@@ -518,9 +518,12 @@ export function Diagram({
   useLayoutEffect(() => {
     const container = host.current;
     if (state.kind !== 'rendered' || !container) return;
-    container.innerHTML = state.svg;
-    const svg = container.querySelector('svg');
-    if (!svg) return;
+    // Parsed into a detached document, then moved in: nothing in it runs or loads
+    // while it is parsed, and no markup is assigned to a live element.
+    const parsed = new DOMParser().parseFromString(state.svg, 'text/html').body.querySelector('svg');
+    if (!parsed) return;
+    const svg = document.importNode(parsed, true);
+    container.replaceChildren(svg);
     const box = svg.viewBox.baseVal;
     natural.current = { width: box?.width || svg.getBoundingClientRect().width, height: box?.height || svg.getBoundingClientRect().height };
     svg.removeAttribute('height');
@@ -668,7 +671,7 @@ export function Diagram({
     }
     return () => {
       cleanups.forEach((cleanup) => cleanup());
-      container.innerHTML = '';
+      container.replaceChildren();
     };
   }, [state, links, details, ruleMarks]);
 
