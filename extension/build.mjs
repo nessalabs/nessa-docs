@@ -45,7 +45,8 @@ const common = {
 };
 const manifests = {
   chrome: { ...common, minimum_chrome_version: '116' },
-  firefox: { ...common, browser_specific_settings: { gecko: { id: 'nessa-docs@nessalabs.dev', strict_min_version: '128.0' } } },
+  // Collects nothing: every request goes to GitHub, and settings stay in this browser.
+  firefox: { ...common, browser_specific_settings: { gecko: { id: 'nessa-docs@nessalabs.dev', strict_min_version: '128.0', data_collection_permissions: { required: ['none'] } } } },
 };
 
 for (const [target, manifest] of Object.entries(manifests)) {
