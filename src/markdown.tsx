@@ -6,6 +6,7 @@ import { Fragment, type ReactNode, useId, useState } from 'react';
 import type { Token, Tokens } from 'marked';
 import type { LinkTarget, ReferenceRuleView, ResolvedReference } from '../shared/api';
 import { AppLink, documentPath, navigate } from './router';
+import { useReaderHost } from './host';
 import { decodeEntities, diagramCard, headingSlugs, isMermaid, markdownDiagrams, plainText } from '../shared/markdown';
 import { compileRules, type CompiledRule, referenceKey, splitReferences } from '../shared/references';
 
@@ -402,6 +403,7 @@ export function ResolvedLink({
 }
 
 export function TargetLink({ target, image, children }: { target: LinkTarget; image?: boolean; children: ReactNode }) {
+  const host = useReaderHost();
   const label = image ? <span className="evidence-image">Image: {children}</span> : children;
   switch (target.kind) {
     case 'document':
@@ -427,6 +429,15 @@ export function TargetLink({ target, image, children }: { target: LinkTarget; im
       );
     case 'repo-file': {
       const location = `${target.path}${target.fragment ? `#${target.fragment}` : ''}`;
+      const href = target.exists ? host.repoFileHref(target.path, target.fragment) : null;
+      if (href) {
+        return (
+          <a href={href} target="_blank" rel="noopener noreferrer" className="evidence evidence-present" title={`Open ${location}`} data-evidence="repo-file">
+            {label}
+            <code className="evidence-path">{location}</code>
+          </a>
+        );
+      }
       return (
         <span
           className={`evidence ${target.exists ? 'evidence-present' : 'evidence-missing'}`}

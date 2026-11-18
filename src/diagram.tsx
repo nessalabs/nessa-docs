@@ -35,7 +35,7 @@ function loadMermaid(): Promise<MermaidApi> {
 // `stage` matches .diagram-stage in styles.css so edge labels sit on it cleanly.
 const PALETTE: Record<Appearance, Record<string, string>> = {
   dark: {
-    stage: '#161616',
+    stage: '#131313',
     node: '#232323',
     nodeBorder: '#474747',
     text: '#ededed',
@@ -46,7 +46,7 @@ const PALETTE: Record<Appearance, Record<string, string>> = {
     note: '#262626',
   },
   light: {
-    stage: '#fbfbfb',
+    stage: '#fafafa',
     node: '#ffffff',
     nodeBorder: '#c7c7c7',
     text: '#1c1c1c',
@@ -113,10 +113,18 @@ function themeVariables(appearance: Appearance) {
   };
 }
 
-/** Mermaid keeps global state, so one render at a time. */
+/**
+ * Mermaid keeps global state, so one use at a time: every render here, and the
+ * browser extension's diagram reader (which builds the catalog in the page).
+ */
+export function withMermaid<T>(task: (mermaid: MermaidApi) => Promise<T>): Promise<T> {
+  const job = queue.then(async () => task(await loadMermaid()));
+  queue = job.catch(() => undefined);
+  return job;
+}
+
 function renderSvg(source: string, appearance: Appearance): Promise<{ svg: string; renderId: string }> {
-  const job = queue.then(async () => {
-    const mermaid = await loadMermaid();
+  return withMermaid(async (mermaid) => {
     mermaid.initialize({
       startOnLoad: false,
       securityLevel: 'strict',
@@ -137,8 +145,6 @@ function renderSvg(source: string, appearance: Appearance): Promise<{ svg: strin
       document.getElementById(`d${renderId}`)?.remove();
     }
   });
-  queue = job.catch(() => undefined);
-  return job;
 }
 
 const renderedDiagrams = new Map<string, { svg: string; renderId: string }>();
@@ -512,9 +518,12 @@ export function Diagram({
   useLayoutEffect(() => {
     const container = host.current;
     if (state.kind !== 'rendered' || !container) return;
-    container.innerHTML = state.svg;
-    const svg = container.querySelector('svg');
-    if (!svg) return;
+    // Parsed into a detached document, then moved in: nothing in it runs or loads
+    // while it is parsed, and no markup is assigned to a live element.
+    const parsed = new DOMParser().parseFromString(state.svg, 'text/html').body.querySelector('svg');
+    if (!parsed) return;
+    const svg = document.importNode(parsed, true);
+    container.replaceChildren(svg);
     const box = svg.viewBox.baseVal;
     natural.current = { width: box?.width || svg.getBoundingClientRect().width, height: box?.height || svg.getBoundingClientRect().height };
     svg.removeAttribute('height');
@@ -662,7 +671,7 @@ export function Diagram({
     }
     return () => {
       cleanups.forEach((cleanup) => cleanup());
-      container.innerHTML = '';
+      container.replaceChildren();
     };
   }, [state, links, details, ruleMarks]);
 

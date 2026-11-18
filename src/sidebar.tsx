@@ -10,6 +10,7 @@ import { byKind, KIND_NAME } from './kinds';
 import { AppLink, documentPath, settingsPath } from './router';
 import { RuleStatusIcon } from './rule-check';
 import { WORK_TEXT } from './ui';
+import { useReaderHost } from './host';
 import { Input } from './ui';
 
 interface SidebarProps {
@@ -66,8 +67,10 @@ export function Sidebar({ catalog, currentId, onNavigate }: SidebarProps) {
  * catalog does not (verification/settings.mjs opens it in each state).
  */
 export function SidebarFooter({ current, onNavigate }: { current: boolean; onNavigate: () => void }) {
+  const host = useReaderHost();
   return (
     <div className="sidebar-footer">
+      {host.sidebarFooter}
       <AppLink to={settingsPath()} onClick={onNavigate} className="row settings-link" aria-current={current ? 'page' : undefined}>
         <span className="row-icon" aria-hidden="true">
           <Settings />

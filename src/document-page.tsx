@@ -24,6 +24,7 @@ import { Titlebar } from './shell';
 import { plainText } from '../shared/markdown';
 import { DocumentStatusLabel, IconButton, QuietButton, SegmentedControl, SegmentedControlOption, WorkStateLabel } from './ui';
 import { isQuiet, type WorkMark, workMarks, WorkView } from './work-view';
+import { useReaderHost } from './host';
 import { RuleBadge, RuleCheckControls, RulePath, ruleVerification, useRuleDisclosure } from './rule-check';
 import type { ProjectReads } from './project-opening/read-port';
 import { useEscapeLayer } from './layers';
@@ -277,12 +278,13 @@ function DocumentView({ response, focusOnLoad, onChecked, pending }: { response:
     }
     return marks;
   }, [response.document.modelCheck]);
+  const host = useReaderHost();
   const ruleMark = document.model
     ? ruleVerification({ model: true, modelCheck: document.modelCheck, stale: document.modelCheckStale })
     : null;
   const rules = useRuleDisclosure(
     ruleMark,
-    document.model ? <DocumentRuleCheck id={document.id} onDone={onChecked} /> : null,
+    document.model && host.localProject ? <DocumentRuleCheck id={document.id} onDone={onChecked} /> : null,
     document.id,
   );
   const [expandedCharts, setExpandedCharts] = useState(0);

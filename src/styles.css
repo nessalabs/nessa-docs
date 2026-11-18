@@ -28,7 +28,7 @@
   /* Solid, so Mermaid's edge labels (src/diagram.tsx PALETTE.stage) match exactly. */
   --app-bg: oklch(0.955 0 0);
   --pane: oklch(0.985 0 0);
-  --stage: #fbfbfb;
+  --stage: #fafafa; /* the pane itself: a chart sits flat on the page */
   --diagram-node: #ffffff;
   --link: oklch(0.5 0.13 252);
   --warn: oklch(0.55 0.13 65);
@@ -47,7 +47,7 @@
 .dark {
   --app-bg: oklch(0.145 0 0);
   --pane: oklch(0.185 0 0);
-  --stage: #161616;
+  --stage: #131313;
   --diagram-node: #232323;
   --link: oklch(0.8 0.075 245);
   --warn: oklch(0.82 0.12 78);
@@ -649,12 +649,15 @@ figure {
   margin-top: auto;
   display: flex;
   flex: none;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
   padding: 6px 8px;
   border-top: 1px solid var(--hairline);
 }
-.settings-link {
-  flex: 1;
+/* Settings, and any row the host adds above it (src/host.tsx). */
+.sidebar-footer > .row {
+  flex: none;
 }
 
 /* ——— Pages ——— */
@@ -941,9 +944,8 @@ figure {
   margin: 0;
   padding: 0;
   list-style: none;
-  border-radius: var(--radius-panel);
-  box-shadow: inset 0 0 0 1px var(--rim);
-  overflow: hidden;
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
 }
 .child-list li + li {
   border-top: 1px solid var(--hairline);
@@ -955,7 +957,10 @@ figure {
     'title meta'
     'summary meta';
   column-gap: 16px;
-  padding: 9px 14px;
+  /* Text lines up with the page; the hover fill reaches a little past it. */
+  margin: 0 -8px;
+  padding: 10px 8px;
+  border-radius: var(--radius-row);
   color: var(--ink);
 }
 .child-row:hover {
@@ -1179,9 +1184,9 @@ figure {
 
 .diagram {
   margin: 24px 0 28px;
-  border-radius: 12px;
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
   background: var(--stage);
-  box-shadow: inset 0 0 0 1px var(--rim);
   overflow: hidden;
 }
 .diagram-stage {
@@ -1228,7 +1233,7 @@ figure {
   justify-content: space-between;
   gap: 12px;
   min-height: 40px;
-  padding: 4px 6px 4px 14px;
+  padding: 4px 0;
   border-bottom: 1px solid var(--hairline);
 }
 .diagram-caption {
@@ -1377,9 +1382,14 @@ figure {
   display: flex;
   flex-direction: column;
   margin: 0;
+  border: 0;
+  border-radius: 12px;
   box-shadow:
     inset 0 0 0 1px var(--rim),
     0 30px 80px -20px rgb(0 0 0 / 70%);
+}
+.diagram[data-expanded] .diagram-head {
+  padding: 4px 6px 4px 14px;
 }
 .diagram[data-expanded] .diagram-stage {
   flex: 1;

@@ -15,6 +15,7 @@ import { parseDiagramDetail, setDiagramDetail, useDiagramDetail } from './diagra
 import { IssueList } from './document-page';
 import { AppLink, navigate, parseSettingsTab, settingsPath, useSearch } from './router';
 import { Titlebar } from './shell';
+import { useReaderHost } from './host';
 import { QuietButton, SegmentedControl, SegmentedControlOption } from './ui';
 
 export function SettingsPage({
@@ -67,11 +68,14 @@ export function SettingsPage({
 function GeneralSettings({ projectTitle }: { projectTitle: string | null }) {
   const appearance = useAppearance();
   const detail = useDiagramDetail();
+  const host = useReaderHost();
   return (
     <>
-    <SettingsGroup title="Project">
-      <SettingsRow label={projectTitle ?? 'No project open'} control={<QuietButton asChild><AppLink to="/open" data-action="open-project">{projectTitle ? 'Change project…' : 'Open project…'}</AppLink></QuietButton>} />
-    </SettingsGroup>
+    {host.localProject ? (
+      <SettingsGroup title="Project">
+        <SettingsRow label={projectTitle ?? 'No project open'} control={<QuietButton asChild><AppLink to="/open" data-action="open-project">{projectTitle ? 'Change project…' : 'Open project…'}</AppLink></QuietButton>} />
+      </SettingsGroup>
+    ) : null}
     <SettingsGroup title="Appearance">
       <SettingsRow
         label="Theme"
@@ -121,6 +125,7 @@ function GeneralSettings({ projectTitle }: { projectTitle: string | null }) {
 }
 
 function HealthSettings({ catalogState, onReload, source }: { catalogState: CatalogState; onReload: () => void; source: ProjectSource }) {
+  const host = useReaderHost();
   const reading = catalogState.kind === 'loading' || catalogState.reloading;
   const catalog = catalogState.kind === 'loaded' ? catalogState.catalog : null;
   const errors = catalog?.issues.filter((issue) => issue.severity === 'error') ?? [];
@@ -151,7 +156,7 @@ function HealthSettings({ catalogState, onReload, source }: { catalogState: Cata
           }
         />
       </SettingsGroup>
-      <CheckerHealth source={source} />
+      {host.localProject ? <CheckerHealth source={source} /> : null}
       {catalogState.kind === 'failed' ? (
         <div className="health-failure" role="alert">
           {catalogState.message}
