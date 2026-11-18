@@ -35,7 +35,7 @@ function loadMermaid(): Promise<MermaidApi> {
 // `stage` matches .diagram-stage in styles.css so edge labels sit on it cleanly.
 const PALETTE: Record<Appearance, Record<string, string>> = {
   dark: {
-    stage: '#161616',
+    stage: '#131313',
     node: '#232323',
     nodeBorder: '#474747',
     text: '#ededed',
@@ -46,7 +46,7 @@ const PALETTE: Record<Appearance, Record<string, string>> = {
     note: '#262626',
   },
   light: {
-    stage: '#fbfbfb',
+    stage: '#fafafa',
     node: '#ffffff',
     nodeBorder: '#c7c7c7',
     text: '#1c1c1c',
