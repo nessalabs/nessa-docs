@@ -7,19 +7,39 @@ local app. Everything is read from GitHub as you browse; there is no server.
 
 ![A docs folder on GitHub, in the reader](screenshots/overview-dark.png)
 
-## Build and load
+## Install
+
+Store listings come later. Until then, download the build from this repository:
+
+- Chrome (and Edge, Brave, Arc): [nessa-docs-chrome.zip](https://github.com/nessalabs/nessa-docs/raw/main/extension/downloads/nessa-docs-chrome.zip)
+- Firefox 128+: [nessa-docs-firefox.zip](https://github.com/nessalabs/nessa-docs/raw/main/extension/downloads/nessa-docs-firefox.zip)
+
+**Chrome**
+
+1. Unzip `nessa-docs-chrome.zip` somewhere you will keep it (Chrome loads it from that folder).
+2. Open `chrome://extensions` and turn on **Developer mode** (top right).
+3. Click **Load unpacked** and pick the unzipped folder.
+
+To update, replace the folder's contents with a newer download and click the reload arrow on the extension's card.
+
+**Firefox**
+
+1. Open `about:debugging#/runtime/this-firefox`.
+2. Click **Load Temporary Add-on…** and pick `nessa-docs-firefox.zip` itself.
+
+Firefox removes a temporary add-on when it restarts, because the build is not signed yet. To keep it, use Firefox Developer Edition or Nightly with `xpinstall.signatures.required` set to `false` in `about:config`, then install the zip from `about:addons` (gear menu, **Install Add-on From File…**). The store listing will remove this step.
+
+Then open any `…/tree/<branch>/docs/state` folder on github.com, or a page in it.
+
+## Build from source
 
 ```sh
 npm ci
-npm run build:extension
+npm run build:extension    # dist/extension/chrome and dist/extension/firefox
+npm run package:extension  # also refreshes extension/downloads/*.zip
 ```
 
-- **Chrome**: `chrome://extensions`, turn on Developer mode, **Load unpacked**,
-  pick `dist/extension/chrome`.
-- **Firefox** (128+): `about:debugging#/runtime/this-firefox`, **Load
-  Temporary Add-on**, pick `dist/extension/firefox/manifest.json`.
-
-Then open any `…/tree/<branch>/docs/state` folder on github.com, or a page in it.
+Load `dist/extension/chrome` with **Load unpacked**, or `dist/extension/firefox/manifest.json` as a temporary add-on. After changing anything the extension ships (`extension/`, `src/`, `shared/`, `server/` code it imports), run `npm run package:extension` and commit the refreshed zips with the change, so the downloads match the code.
 
 ## How it works
 

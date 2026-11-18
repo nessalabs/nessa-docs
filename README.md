@@ -41,6 +41,14 @@ run a coding agent. Use **Diagrams** for charts and **Details** for the complete
 page and its sources. Drag a chart to pan; use Zoom or Fit to change its scale.
 A box or arrow with a **+** opens an explanation or a deeper page.
 
+## Read docs on GitHub
+
+The browser extension shows a repository's `docs/state` folder on github.com
+in this reader, straight from GitHub. Download it for
+[Chrome](https://github.com/nessalabs/nessa-docs/raw/main/extension/downloads/nessa-docs-chrome.zip)
+or [Firefox](https://github.com/nessalabs/nessa-docs/raw/main/extension/downloads/nessa-docs-firefox.zip);
+install steps are in [extension/README.md](extension/README.md#install).
+
 ## Write docs for your project
 
 Copy the skill into the repository you want to document:

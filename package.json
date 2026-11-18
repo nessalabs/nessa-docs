@@ -23,7 +23,8 @@
     "verify:mcp": "node verification/mcp-protocol.mjs && node verification/mcp-browser.mjs",
     "verify:durable": "node verification/mcp-durable.mjs",
     "build:extension": "node extension/build.mjs",
-    "verify:extension": "npm run build:extension --silent && node verification/extension.mjs"
+    "verify:extension": "npm run build:extension --silent && node verification/extension.mjs",
+    "package:extension": "node extension/build.mjs --package"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",

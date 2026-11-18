@@ -1,7 +1,10 @@
 // Builds the extension for Chrome and Firefox from one codebase:
 //   dist/extension/chrome/   load unpacked in chrome://extensions
 //   dist/extension/firefox/  load as a temporary add-on in about:debugging
-// The two differ only in their manifest.
+// The two differ only in their manifest. With --package it also writes the
+// downloadable zips in extension/downloads/ (committed, so people can install
+// before the store listings exist).
+import { execFileSync } from 'node:child_process';
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
@@ -54,3 +57,15 @@ for (const [target, manifest] of Object.entries(manifests)) {
 }
 await rm(staging, { recursive: true, force: true });
 console.log(`Built dist/extension/chrome and dist/extension/firefox (${version}).`);
+
+if (process.argv.includes('--package')) {
+  const downloads = here('./downloads/');
+  await mkdir(downloads, { recursive: true });
+  for (const target of Object.keys(manifests)) {
+    const zip = `${downloads}nessa-docs-${target}.zip`;
+    await rm(zip, { force: true });
+    // -X: no extra file attributes (owner ids and the like) in the archive.
+    execFileSync('zip', ['-q', '-X', '-r', zip, '.'], { cwd: `${out}${target}` });
+  }
+  console.log(`Packaged extension/downloads/nessa-docs-{chrome,firefox}.zip (${version}).`);
+}
