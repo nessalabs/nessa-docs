@@ -1,8 +1,10 @@
 // The content script on github.com. It watches the address (GitHub moves
-// between pages without reloading), and on a page inside a Nessa Docs folder it
-// covers GitHub's view with the reader: the extension's own page in an iframe,
-// which asks this script for the repository's files. "GitHub view" in the
-// reader takes the cover off; a small button brings it back.
+// between pages without reloading). On a page inside a Nessa Docs folder it
+// leaves GitHub's view in place, shows an "Open in Docs" button, and starts the
+// reader out of sight: the extension's own page in an iframe, which asks this
+// script for the repository's files and reads them while the person is still
+// on GitHub's view. The button then only uncovers it. "GitHub view" in the
+// reader covers it again. An option opens docs folders in the reader at once.
 
 import { docsPageOf, type DocsPage, type DocsRoot, pageUrl, sameRoot, STATE_DIRECTORY } from './github-location';
 import { resolveDocs, type RepoReader } from './github-source';
@@ -15,14 +17,18 @@ const api = extensionApi();
 const READER_URL = api.runtime.getURL('reader.html');
 const READER_ORIGIN = new URL(READER_URL).origin;
 const OPEN_CLASS = 'nessa-docs-open';
-/** Per tab: the docs roots the person switched back to GitHub's view for. */
-const GITHUB_VIEW_KEY = 'nessa-docs:github-view';
+const PREPARING_CLASS = 'nessa-docs-preparing';
+/** Per tab: which view the person last chose for each docs root. */
+const VIEW_KEY = 'nessa-docs:view';
+type View = 'reader' | 'github';
 
 interface Mounted {
   readonly reader: RepoReader;
   readonly frame: HTMLIFrameElement;
   readonly overlay: HTMLElement;
   port: MessagePort | null;
+  /** False while the reader prepares out of sight behind GitHub's view. */
+  shown: boolean;
 }
 
 let mounted: Mounted | null = null;
@@ -37,22 +43,23 @@ function rootKey(root: Pick<DocsRoot, 'owner' | 'repo' | 'prefix'>): string {
   return `${root.owner}/${root.repo}/${root.prefix}`.toLowerCase();
 }
 
-function githubViewChosen(root: DocsRoot): boolean {
+function readViews(): Record<string, View> {
   try {
-    const keys = JSON.parse(sessionStorage.getItem(GITHUB_VIEW_KEY) ?? '[]') as unknown;
-    return Array.isArray(keys) && keys.includes(rootKey(root));
+    const parsed = JSON.parse(sessionStorage.getItem(VIEW_KEY) ?? '{}') as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, View] => entry[1] === 'reader' || entry[1] === 'github'));
   } catch {
-    return false;
+    return {};
   }
 }
 
-function chooseGithubView(root: DocsRoot, chosen: boolean) {
+function chosenView(root: DocsRoot): View | null {
+  return readViews()[rootKey(root)] ?? null;
+}
+
+function chooseView(root: DocsRoot, view: View) {
   try {
-    const parsed = JSON.parse(sessionStorage.getItem(GITHUB_VIEW_KEY) ?? '[]') as unknown;
-    const keys = new Set(Array.isArray(parsed) ? parsed.filter((key): key is string => typeof key === 'string') : []);
-    if (chosen) keys.add(rootKey(root));
-    else keys.delete(rootKey(root));
-    sessionStorage.setItem(GITHUB_VIEW_KEY, JSON.stringify([...keys]));
+    sessionStorage.setItem(VIEW_KEY, JSON.stringify({ ...readViews(), [rootKey(root)]: view }));
   } catch {
     // Storage blocked: the choice lasts until the next page.
   }
@@ -75,6 +82,8 @@ function installStyles() {
   style.textContent = `
     html.${OPEN_CLASS}, html.${OPEN_CLASS} body { overflow: hidden !important; }
     #nessa-docs-overlay { position: fixed; inset: 0; z-index: 2147483646; background: #f7f7f8; }
+    /* Laid out (charts measure text) but unseen and untouchable. */
+    #nessa-docs-overlay.${PREPARING_CLASS} { visibility: hidden; pointer-events: none; }
     @media (prefers-color-scheme: dark) { #nessa-docs-overlay { background: #111113; } }
     #nessa-docs-overlay iframe { display: block; width: 100%; height: 100%; border: 0; color-scheme: normal; }
     #nessa-docs-launcher {
@@ -105,8 +114,9 @@ function showLauncher(reader: RepoReader | null) {
   name.textContent = 'nessa';
   button.append(name, document.createTextNode('Open in Docs'));
   button.addEventListener('click', () => {
-    chooseGithubView(reader.root, false);
-    mount(reader, fileFromAddress(reader.root));
+    chooseView(reader.root, 'reader');
+    if (mounted?.reader === reader) show(mounted);
+    else show(mount(reader, fileFromAddress(reader.root)));
   });
   // On <html>, not <body>: GitHub replaces <body> on some navigations.
   document.documentElement.append(button);
@@ -134,20 +144,22 @@ function unmount() {
   mounted = null;
 }
 
-function mount(reader: RepoReader, file: string | null) {
+/** Starts the reader out of sight; `show` uncovers it. */
+function mount(reader: RepoReader, file: string | null): Mounted {
   unmount();
-  document.getElementById('nessa-docs-launcher')?.remove();
   installStyles();
   const overlay = document.createElement('div');
   overlay.id = 'nessa-docs-overlay';
+  overlay.className = PREPARING_CLASS;
+  overlay.inert = true;
+  overlay.setAttribute('aria-hidden', 'true');
   const frame = document.createElement('iframe');
   frame.title = 'Nessa Docs';
   frame.src = READER_URL;
   frame.allow = 'clipboard-write';
   overlay.append(frame);
   document.documentElement.append(overlay);
-  document.documentElement.classList.add(OPEN_CLASS);
-  const current: Mounted = { reader, frame, overlay, port: null };
+  const current: Mounted = { reader, frame, overlay, port: null, shown: false };
   mounted = current;
 
   const onReady = (event: MessageEvent) => {
@@ -165,12 +177,32 @@ function mount(reader: RepoReader, file: string | null) {
     if (!overlay.isConnected) { window.removeEventListener('message', onReady); stop.disconnect(); }
   });
   stop.observe(document.documentElement, { childList: true });
+  return current;
+}
+
+function show(current: Mounted) {
+  current.shown = true;
+  current.overlay.classList.remove(PREPARING_CLASS);
+  current.overlay.inert = false;
+  current.overlay.removeAttribute('aria-hidden');
+  document.documentElement.classList.add(OPEN_CLASS);
+  document.getElementById('nessa-docs-launcher')?.remove();
+  current.frame.focus();
+}
+
+function hide(current: Mounted) {
+  current.shown = false;
+  current.overlay.classList.add(PREPARING_CLASS);
+  current.overlay.inert = true;
+  current.overlay.setAttribute('aria-hidden', 'true');
+  document.documentElement.classList.remove(OPEN_CLASS);
 }
 
 async function answer(current: Mounted, message: Request | ReaderEvent) {
   if ('type' in message) {
-    if (message.type === 'route') showAddress(current.reader.root, message.file);
-    else if (message.type === 'show-github') showGithub(current.reader);
+    // Out of sight the reader follows the address; it never moves it.
+    if (message.type === 'route') { if (current.shown) showAddress(current.reader.root, message.file); }
+    else if (message.type === 'show-github') showGithub(current);
     return;
   }
   let reply: Answer;
@@ -199,16 +231,17 @@ function showAddress(root: DocsRoot, file: string | null) {
   }
 }
 
-function showGithub(reader: RepoReader) {
-  chooseGithubView(reader.root, true);
-  unmount();
+function showGithub(current: Mounted) {
+  chooseView(current.reader.root, 'github');
   // GitHub's view still shows the page it last drew; the address may have moved
-  // since. A reload draws what the address says.
+  // since. A reload draws what the address says (and prepares the reader again).
   if (ownHref !== null && location.href === ownHref) {
+    unmount();
     location.reload();
     return;
   }
-  showLauncher(reader);
+  hide(current);
+  showLauncher(current.reader);
 }
 
 // ---------------------------------------------------------------- watching the address
@@ -244,7 +277,9 @@ async function arrive() {
   }
   found = resolution.reader;
   const file = fileAt(found.root, page) ?? null;
-  if (settings.autoOpen && !githubViewChosen(found.root)) mount(found, file);
+  const view = chosenView(found.root) ?? (settings.autoOpen ? 'reader' : 'github');
+  const prepared = mount(found, file);
+  if (view === 'reader') show(prepared);
   else showLauncher(found);
 }
 

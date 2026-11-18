@@ -15,9 +15,9 @@ export async function readSettings(api: ExtensionApi): Promise<Settings> {
   try {
     const stored = await api.storage.local.get(KEYS);
     const token = typeof stored.token === 'string' && stored.token.trim() ? stored.token.trim() : null;
-    return { autoOpen: stored.autoOpen !== false, token };
+    return { autoOpen: stored.autoOpen === true, token };
   } catch {
-    return { autoOpen: true, token: null };
+    return { autoOpen: false, token: null };
   }
 }
 

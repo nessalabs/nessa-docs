@@ -4,7 +4,9 @@
 // the run needs no network and no account. Chromium only: Playwright cannot load
 // extensions into Firefox or WebKit.
 //
-// What it checks: a docs folder opens in the reader; a page's own address opens
+// What it checks: a docs folder keeps GitHub's view and shows an Open in Docs
+// button while the reader prepares out of sight, and the button opens it;
+// files read once come from this browser the next time; a page's own address opens
 // that page; moving in the reader moves GitHub's address; repository evidence
 // links to GitHub; "GitHub view" takes the cover off and the corner button puts
 // it back; moving out of the folder (GitHub's own soft navigation) removes it;
@@ -86,10 +88,16 @@ export async function runExtension() {
     const reader = async () => (await page.waitForSelector('#nessa-docs-overlay iframe', { timeout: 15000 })).contentFrame();
     const title = (frame) => frame.locator('.page h1').first().innerText({ timeout: 15000 });
 
-    // A docs folder opens in the reader, on the overview.
+    // A docs folder keeps GitHub's view, with a button, while the reader prepares behind it.
     await page.goto(`${BASE}/tree/${BRANCH}/docs/state`);
+    await page.waitForSelector('#nessa-docs-launcher', { timeout: 15000 });
+    const hidden = await page.waitForSelector('#nessa-docs-overlay.nessa-docs-preparing iframe', { state: 'attached', timeout: 15000 });
+    c.check("GitHub's view stays, with the button", (await page.locator('#github-view').isVisible()) && !(await page.evaluate(() => document.documentElement.classList.contains('nessa-docs-open'))));
+    await (await hidden.contentFrame()).waitForSelector('.page h1', { state: 'attached', timeout: 15000 });
+    c.check('the reader prepares out of sight', true);
+    await page.locator('#nessa-docs-launcher').click();
     let frame = await reader();
-    c.check('the folder opens on the overview', (await title(frame)) === 'Example store');
+    c.check('the button opens the overview', (await title(frame)) === 'Example store');
     c.check('the reader covers the page', await page.evaluate(() => document.documentElement.classList.contains('nessa-docs-open')));
     await page.screenshot({ path: join(SCREENSHOTS, 'extension-overview.png') });
 
@@ -121,15 +129,26 @@ export async function runExtension() {
     await page.waitForFunction(() => location.pathname.endsWith('order-lifecycle.md'));
     await frame.locator('button.ext-github-view').click();
     await page.waitForSelector('#nessa-docs-launcher', { timeout: 15000 });
-    c.check('GitHub view shows GitHub', (await page.locator('#nessa-docs-overlay').count()) === 0 && (await page.locator('#github-view').count()) === 1);
+    const covered = () => page.evaluate(() => { const overlay = document.getElementById('nessa-docs-overlay'); return overlay !== null && !overlay.classList.contains('nessa-docs-preparing'); });
+    c.check('GitHub view shows GitHub', !(await covered()) && (await page.locator('#github-view').count()) === 1);
     c.check('GitHub view draws the address it names', (await page.locator('body').innerText()).includes('docs/state/order-lifecycle.md'));
     await page.screenshot({ path: join(SCREENSHOTS, 'extension-github-view.png') });
     await page.reload();
     await page.waitForSelector('#nessa-docs-launcher', { timeout: 15000 });
-    c.check('the choice lasts for the tab', (await page.locator('#nessa-docs-overlay').count()) === 0);
+    c.check('the choice lasts for the tab', !(await covered()));
     await page.locator('#nessa-docs-launcher').click();
     frame = await reader();
     c.check('the button reopens the same page', (await title(frame)) === 'Submit or cancel an order');
+
+    // Files read before at this commit come from this browser: a reload asks GitHub for no file text.
+    const fileReads = [];
+    const countReads = (request) => { if (request.method() === 'GET' && new URL(request.url()).hostname === 'raw.githubusercontent.com') fileReads.push(request.url()); };
+    context.on('request', countReads);
+    await page.reload();
+    frame = await reader();
+    const reloaded = await title(frame);
+    context.off('request', countReads);
+    c.check('a second visit reads no file from GitHub', reloaded === 'Submit or cancel an order' && fileReads.length === 0, { fileReads: fileReads.length });
 
     // GitHub's own soft navigation out of the folder removes the reader, and back in restores it.
     await page.evaluate((to) => history.pushState({}, '', to), `/${OWNER}/${REPO}/tree/${BRANCH}/src`);

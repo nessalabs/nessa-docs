@@ -20,6 +20,7 @@ import { portClient, type RepoPort } from './port-client';
 import { READY, type OpenFile, type ReaderInit } from './protocol';
 import { githubProject, PROJECT_ID } from './project-source';
 import { repoFiles } from './repo-files';
+import { cachedPort, indexedDbStore } from './file-cache';
 
 const GITHUB_ORIGIN = 'https://github.com';
 applyAppearance(readAppearance());
@@ -29,7 +30,7 @@ const reactRoot = createRoot(container);
 showStatus('Reading docs/state from GitHub…');
 
 function showStatus(message: string, failed = false) {
-  reactRoot.render(<div className="ext-status" role={failed ? 'alert' : 'status'} aria-busy={failed ? undefined : true}><span className="brand-name">nessa</span><span className="brand-product">Docs</span><p>{message}</p></div>);
+  reactRoot.render(<div className="ext-status" role={failed ? 'alert' : 'status'} aria-busy={failed ? undefined : true}><span className="ext-brand"><span className="brand-name">nessa</span><span className="brand-product">Docs</span></span><p>{message}</p></div>);
 }
 
 function idForFile(catalog: Catalog, file: string | null): string | null {
@@ -87,7 +88,9 @@ async function start(init: ReaderInit, messagePort: MessagePort) {
     if (window.location.pathname !== to) navigate(to);
   });
   const { root } = init;
-  const project = githubProject(repoFiles(port, root.prefix), `${root.owner}/${root.repo}`);
+  // Files read before at this commit come from this browser, not GitHub.
+  const files = cachedPort(port, root, await indexedDbStore());
+  const project = githubProject(repoFiles(files, root.prefix), `${root.owner}/${root.repo}`);
   try {
     catalog = await project.catalog();
   } catch (error) {
