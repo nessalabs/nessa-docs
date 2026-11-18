@@ -112,6 +112,13 @@ function showLauncher(reader: RepoReader | null) {
   document.documentElement.append(button);
 }
 
+/** The page the address points at now, or `fallback` when it points outside this root. */
+function currentFile(root: DocsRoot, fallback: string | null): string | null {
+  const page = docsPageOf(location.pathname);
+  const file = page ? fileAt(root, page) : undefined;
+  return file === undefined ? fallback : file;
+}
+
 function fileFromAddress(root: DocsRoot): string | null {
   const page = docsPageOf(location.pathname);
   return page ? fileAt(root, page) ?? null : null;
@@ -149,7 +156,8 @@ function mount(reader: RepoReader, file: string | null) {
     const channel = new MessageChannel();
     current.port = channel.port1;
     channel.port1.onmessage = (message) => void answer(current, message.data as Request | ReaderEvent);
-    const init: ReaderInit = { type: 'init', root: reader.root, file };
+    // The address may have moved while the iframe loaded; open where it points now.
+    const init: ReaderInit = { type: 'init', root: reader.root, file: currentFile(reader.root, file) };
     frame.contentWindow?.postMessage(init, READER_ORIGIN, [channel.port2]);
   };
   window.addEventListener('message', onReady);

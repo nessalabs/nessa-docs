@@ -75,9 +75,12 @@ function Reader({ root, catalog, port, source }: { root: DocsRoot; catalog: Cata
 
 async function start(init: ReaderInit, messagePort: MessagePort) {
   let catalog: Catalog | null = null;
+  // The page to open first: GitHub's address may move again while the catalog loads.
+  let firstFile = init.file;
   const port = portClient(messagePort, (message) => {
     const open = message as Partial<OpenFile> | null;
-    if (open?.type !== 'open' || catalog === null) return;
+    if (open?.type !== 'open') return;
+    if (catalog === null) { firstFile = open.file ?? null; return; }
     const id = idForFile(catalog, open.file ?? null) ?? catalog.rootId;
     if (id === null) return;
     const to = documentPath(id);
@@ -92,7 +95,7 @@ async function start(init: ReaderInit, messagePort: MessagePort) {
     return;
   }
   // The reader's router reads the address: start on the page GitHub's address names.
-  const id = idForFile(catalog, init.file);
+  const id = idForFile(catalog, firstFile);
   const path = id && id !== catalog.rootId ? documentPath(id) : '/';
   window.history.replaceState({ index: 0 }, '', `${path}?project=${PROJECT_ID}`);
   document.title = `${root.owner}/${root.repo} · Nessa Docs`;
