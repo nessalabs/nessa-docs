@@ -93,9 +93,26 @@ function kindOf(contentType: string): ListedEntry['kind'] {
 async function text(response: Response, maxBytes: number): Promise<ReadAnswer> {
   const declared = Number(response.headers.get('content-length'));
   if (Number.isFinite(declared) && declared > maxBytes) return { kind: 'too-large', size: declared };
-  const body = await response.text();
-  const size = new TextEncoder().encode(body).length;
-  return size > maxBytes ? { kind: 'too-large', size } : { kind: 'text', text: body };
+  if (!response.body) return { kind: 'text', text: '' };
+  // Read in pieces and stop at the limit, so an oversized file without a
+  // Content-Length is never downloaded whole.
+  const reader = response.body.getReader();
+  const pieces: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) {
+      void reader.cancel().catch(() => undefined);
+      return { kind: 'too-large', size };
+    }
+    pieces.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let at = 0;
+  for (const piece of pieces) { bytes.set(piece, at); at += piece.byteLength; }
+  return { kind: 'text', text: new TextDecoder().decode(bytes) };
 }
 
 function hasReadme(entries: readonly ListedEntry[] | null): boolean {
@@ -250,7 +267,12 @@ async function resolveRest(page: DocsPage, token: string | null): Promise<Resolu
     const prefixSegments = segments.slice(refLength, before);
     const root: DocsRoot = { owner: page.owner, repo: page.repo, ref, commit, prefix: prefixSegments.length ? `${prefixSegments.join('/')}/` : '' };
     const reader = restReader(root, token);
-    const entries = await reader.list(`${root.prefix}${STATE_DIRECTORY}`).catch(() => null);
+    let entries: readonly ListedEntry[] | null;
+    try {
+      entries = await reader.list(`${root.prefix}${STATE_DIRECTORY}`);
+    } catch (error) {
+      return { kind: 'failed', message: error instanceof Error ? error.message : 'GitHub did not list the docs folder.' };
+    }
     return hasReadme(entries) ? { kind: 'docs', reader } : { kind: 'not-docs' };
   }
   if (refused !== null) {

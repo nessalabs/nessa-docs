@@ -8,7 +8,7 @@
 // that page; moving in the reader moves GitHub's address; repository evidence
 // links to GitHub; "GitHub view" takes the cover off and the corner button puts
 // it back; moving out of the folder (GitHub's own soft navigation) removes it;
-// a folder without docs/state/README.md is left alone.
+// a docs/state folder without README.md, or a repository without one, is left alone.
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -53,6 +53,11 @@ async function fakeGithub(route) {
   }
   if (url.hostname !== 'github.com') return route.abort();
   const [owner, repo, view, ...rest] = parts;
+  // A repository whose docs/state folder exists but holds no README.md.
+  if (owner === OWNER && repo === 'bare' && view === 'tree' && rest.join('/') === 'main/docs/state' && route.request().headers().accept?.includes('application/json')) {
+    const items = [{ name: 'notes.md', path: 'docs/state/notes.md', contentType: 'file' }];
+    return route.fulfill({ status: 200, json: { payload: { codeViewTreeRoute: { path: 'docs/state', refInfo: { name: 'main', currentOid: COMMIT, refType: 'branch' }, tree: { items, totalCount: 1 } } } } });
+  }
   const path = owner === OWNER && repo === REPO && (view === 'tree' || view === 'blob') ? split(rest.join('/')) : null;
   if (route.request().headers().accept?.includes('application/json')) {
     const tree = view === 'tree' && path !== null ? treeJson(path) : null;
@@ -138,6 +143,11 @@ export async function runExtension() {
     await page.goto(`https://github.com/${OWNER}/other/tree/main/docs/state`);
     await page.waitForTimeout(1500);
     c.check('a repository without one is left alone', (await page.locator('#nessa-docs-overlay, #nessa-docs-launcher').count()) === 0);
+    const bareListing = page.waitForResponse((response) => response.url().endsWith(`/${OWNER}/bare/tree/main/docs/state`) && response.request().headers().accept?.includes('application/json'));
+    await page.goto(`https://github.com/${OWNER}/bare/tree/main/docs/state`);
+    await bareListing;
+    await page.waitForTimeout(1500);
+    c.check('a docs/state folder without README.md is left alone', (await page.locator('#nessa-docs-overlay, #nessa-docs-launcher').count()) === 0);
 
     c.check('no page errors', pageErrors.length === 0, { pageErrors });
   } finally {

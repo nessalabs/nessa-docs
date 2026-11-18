@@ -230,6 +230,8 @@ async function arrive() {
       return;
     }
   }
+  // A different root: forget the old one, so coming back to it resolves it again.
+  found = null;
   unmount();
   showLauncher(null);
   const settings = await readSettings(api);

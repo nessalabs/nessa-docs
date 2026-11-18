@@ -41,7 +41,9 @@ export function repoFiles(port: RepoPort, prefix: string): RepositoryFiles {
       if (absolute === REPO_ROOT) return { kind: 'directory', realPath: REPO_ROOT };
       const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
       const name = path.slice(path.lastIndexOf('/') + 1);
-      const entries = await listing(parent).catch(() => null);
+      // A failed listing throws: the catalog load fails and is tried again,
+      // instead of reading GitHub's refusal as a missing folder.
+      const entries = await listing(parent);
       const entry = entries?.find((candidate) => candidate.name === name);
       if (!entry) return { kind: 'missing' };
       // A symlink's target is not followed on GitHub; it counts as neither file nor folder.
