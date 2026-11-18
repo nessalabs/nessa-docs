@@ -5,7 +5,6 @@
 
 import { StrictMode, useEffect, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Github } from 'lucide-react';
 import '@fontsource-variable/geist';
 import '@fontsource-variable/geist-mono';
 import '../../src/styles.css';
@@ -58,14 +57,7 @@ function Reader({ root, catalog, port, source }: { root: DocsRoot; catalog: Cata
   const host = useMemo<ReaderHost>(() => ({
     localProject: false,
     repoFileHref: (path, fragment) => githubUrl(root, `${root.prefix}${path}`, 'blob', fragment),
-    sidebarFooter: (
-      <button type="button" className="row ext-github-view" onClick={() => port.tell({ type: 'show-github' })} title={`${root.owner}/${root.repo} at ${root.ref}`}>
-        <span className="row-icon" aria-hidden="true"><Github /></span>
-        <span className="row-label">GitHub view</span>
-        <span className="ext-ref">{root.ref}</span>
-      </button>
-    ),
-  }), [root, port]);
+  }), [root]);
   return (
     <ReaderHostContext.Provider value={host}>
       <App source={source} />

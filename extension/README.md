@@ -45,7 +45,7 @@ Load `dist/extension/chrome` with **Load unpacked**, or `dist/extension/firefox/
 
 | Piece | What it does |
 | --- | --- |
-| `src/content.ts` | Content script on github.com. Watches the address (GitHub moves between pages without reloading), finds a `docs/state` folder that has a `README.md`, shows an **Open in Docs** button, and starts the reader out of sight in an iframe so the button opens it at once. Keeps the address on the page the reader shows, so links and reloads open the same page. |
+| `src/content.ts` | Content script on github.com. Watches the address (GitHub moves between pages without reloading), finds a `docs/state` folder that has a `README.md`, starts the reader out of sight in an iframe, and shows a GitHub | Docs switch above both views so Docs opens it at once. Keeps the address on the page the reader shows, so links and reloads open the same page. |
 | `src/github-source.ts` | Reads the repository, pinned to one commit. First through the person's github.com session (GitHub's own folder JSON and `/raw/`), so private repositories work for anyone who can see them; public file text comes straight from raw.githubusercontent.com. Falls back to the REST API, with the optional token if one is saved. |
 | `src/protocol.ts`, `src/port-client.ts` | The content script hands the reader a `MessagePort` once; all file requests go over it, out of reach of the GitHub page. |
 | `src/reader.tsx` | The extension page in the iframe. Builds the catalog with the server's own code (`server/catalog.ts`, `server/responses.ts`) over files from GitHub, then draws the local app's `App` through a `ProjectSource` (`src/project-source.ts`). |
@@ -59,13 +59,14 @@ The reader says what it can do through `src/host.tsx` (`ReaderHost`): no folder
 opening or rule checker here, and repository evidence links to the file on
 GitHub.
 
-### Opening the reader, and switching back
+### Switching between GitHub and the reader
 
-A docs folder starts on GitHub's own view with an **Open in Docs** button in the
-corner. The reader reads the docs in the background as soon as the folder is
-found, so the button opens it straight away. **GitHub view** at the foot of the
-sidebar covers it again. The choice lasts for that folder in this tab. Turn on
-"Open docs folders in the reader at once" in the options to skip the button.
+A docs folder starts on GitHub's own view. A small **GitHub | Docs** switch sits
+in the bottom-right corner and stays above both views, so either is one click
+away. The reader reads the docs in the background as soon as the folder is
+found, so **Docs** opens it straight away. The choice lasts for that folder in
+this tab. Turn on "Open docs folders in the reader at once" in the options to
+start on the reader.
 
 ### Kept in this browser
 

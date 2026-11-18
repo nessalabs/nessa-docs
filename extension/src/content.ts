@@ -1,10 +1,11 @@
 // The content script on github.com. It watches the address (GitHub moves
 // between pages without reloading). On a page inside a Nessa Docs folder it
-// leaves GitHub's view in place, shows an "Open in Docs" button, and starts the
-// reader out of sight: the extension's own page in an iframe, which asks this
+// leaves GitHub's view in place and starts the reader out of sight: the
+// extension's own page in an iframe, which asks this
 // script for the repository's files and reads them while the person is still
-// on GitHub's view. The button then only uncovers it. "GitHub view" in the
-// reader covers it again. An option opens docs folders in the reader at once.
+// on GitHub's view. A small GitHub | Docs switch in the corner stays above both
+// views, so either is one click away; Docs only uncovers the prepared reader.
+// An option opens docs folders in the reader at once.
 
 import { docsPageOf, type DocsPage, type DocsRoot, pageUrl, sameRoot, STATE_DIRECTORY } from './github-location';
 import { resolveDocs, type RepoReader } from './github-source';
@@ -86,40 +87,71 @@ function installStyles() {
     #nessa-docs-overlay.${PREPARING_CLASS} { visibility: hidden; pointer-events: none; }
     @media (prefers-color-scheme: dark) { #nessa-docs-overlay { background: #111113; } }
     #nessa-docs-overlay iframe { display: block; width: 100%; height: 100%; border: 0; color-scheme: normal; }
-    #nessa-docs-launcher {
-      position: fixed; right: 20px; bottom: 20px; z-index: 2147483645;
-      display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px;
-      border: 0; border-radius: 999px; cursor: pointer;
-      font: 500 13px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #18181b; color: #fafafa; box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
+    /* One switch, above the reader and GitHub's view alike, so either is one click away. */
+    #nessa-docs-switch {
+      position: fixed; right: 16px; bottom: 16px; z-index: 2147483647;
+      display: inline-flex; align-items: center; gap: 2px; height: 32px; padding: 3px;
+      border-radius: 999px; background: #18181b; color: #a1a1aa;
+      box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08), 0 6px 20px rgb(0 0 0 / 0.22);
+      font: 500 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
-    #nessa-docs-launcher:hover { background: #27272a; }
-    #nessa-docs-launcher:focus-visible { outline: 2px solid #8b8bf5; outline-offset: 2px; }
-    #nessa-docs-launcher b { font-weight: 650; letter-spacing: -0.01em; }
+    #nessa-docs-switch button {
+      display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px;
+      border: 0; border-radius: 999px; background: none; color: inherit; font: inherit; cursor: pointer;
+    }
+    #nessa-docs-switch button:hover { color: #fafafa; }
+    #nessa-docs-switch button[aria-pressed="true"] { background: #3f3f46; color: #fafafa; cursor: default; }
+    #nessa-docs-switch button:focus-visible { outline: 2px solid #8b8bf5; outline-offset: 1px; }
+    #nessa-docs-switch b { font-weight: 650; letter-spacing: -0.01em; }
+    @media print { #nessa-docs-switch { display: none; } }
   `;
   (document.head ?? document.documentElement).append(style);
 }
 
-// ---------------------------------------------------------------- launcher
+// ---------------------------------------------------------------- switch
 
-function showLauncher(reader: RepoReader | null) {
-  document.getElementById('nessa-docs-launcher')?.remove();
+const SWITCH_ID = 'nessa-docs-switch';
+
+/** The GitHub | Docs switch for a docs root, or none (null). */
+function showSwitch(reader: RepoReader | null) {
+  const existing = document.getElementById(SWITCH_ID);
+  if (existing && reader && (existing as HTMLElement & { nessaReader?: RepoReader }).nessaReader === reader) return;
+  existing?.remove();
   if (!reader) return;
   installStyles();
-  const button = document.createElement('button');
-  button.id = 'nessa-docs-launcher';
-  button.type = 'button';
-  button.title = 'Read this folder in Nessa Docs';
+  const bar = document.createElement('div') as HTMLDivElement & { nessaReader?: RepoReader };
+  bar.id = SWITCH_ID;
+  bar.nessaReader = reader;
+  bar.setAttribute('role', 'group');
+  bar.setAttribute('aria-label', 'Nessa Docs view');
+  const github = document.createElement('button');
+  github.type = 'button';
+  github.dataset.view = 'github';
+  github.title = "GitHub's own view of this folder";
+  github.textContent = 'GitHub';
+  const docs = document.createElement('button');
+  docs.type = 'button';
+  docs.dataset.view = 'reader';
+  docs.title = `Read ${reader.root.owner}/${reader.root.repo} at ${reader.root.ref} in Nessa Docs`;
   const name = document.createElement('b');
   name.textContent = 'nessa';
-  button.append(name, document.createTextNode('Open in Docs'));
-  button.addEventListener('click', () => {
+  docs.append(name, document.createTextNode('Docs'));
+  github.addEventListener('click', () => { if (mounted?.reader === reader && mounted.shown) showGithub(mounted); });
+  docs.addEventListener('click', () => {
     chooseView(reader.root, 'reader');
     if (mounted?.reader === reader) show(mounted);
     else show(mount(reader, fileFromAddress(reader.root)));
   });
+  bar.append(github, docs);
   // On <html>, not <body>: GitHub replaces <body> on some navigations.
-  document.documentElement.append(button);
+  document.documentElement.append(bar);
+  markSwitch(mounted?.reader === reader && mounted.shown ? 'reader' : 'github');
+}
+
+function markSwitch(view: View) {
+  for (const button of document.querySelectorAll<HTMLButtonElement>(`#${SWITCH_ID} button`)) {
+    button.setAttribute('aria-pressed', String(button.dataset.view === view));
+  }
 }
 
 /** The page the address points at now, or `fallback` when it points outside this root. */
@@ -186,7 +218,7 @@ function show(current: Mounted) {
   current.overlay.inert = false;
   current.overlay.removeAttribute('aria-hidden');
   document.documentElement.classList.add(OPEN_CLASS);
-  document.getElementById('nessa-docs-launcher')?.remove();
+  markSwitch('reader');
   current.frame.focus();
 }
 
@@ -196,13 +228,13 @@ function hide(current: Mounted) {
   current.overlay.inert = true;
   current.overlay.setAttribute('aria-hidden', 'true');
   document.documentElement.classList.remove(OPEN_CLASS);
+  markSwitch('github');
 }
 
 async function answer(current: Mounted, message: Request | ReaderEvent) {
   if ('type' in message) {
     // Out of sight the reader follows the address; it never moves it.
     if (message.type === 'route') { if (current.shown) showAddress(current.reader.root, message.file); }
-    else if (message.type === 'show-github') showGithub(current);
     return;
   }
   let reply: Answer;
@@ -241,7 +273,6 @@ function showGithub(current: Mounted) {
     return;
   }
   hide(current);
-  showLauncher(current.reader);
 }
 
 // ---------------------------------------------------------------- watching the address
@@ -252,7 +283,7 @@ async function arrive() {
   if (!page) {
     found = null;
     unmount();
-    showLauncher(null);
+    showSwitch(null);
     return;
   }
   // Moving within the docs already open: the reader follows.
@@ -266,7 +297,7 @@ async function arrive() {
   // A different root: forget the old one, so coming back to it resolves it again.
   found = null;
   unmount();
-  showLauncher(null);
+  showSwitch(null);
   const settings = await readSettings(api);
   const resolution = await resolveDocs(page, settings.token);
   if (current !== generation) return;
@@ -279,8 +310,8 @@ async function arrive() {
   const file = fileAt(found.root, page) ?? null;
   const view = chosenView(found.root) ?? (settings.autoOpen ? 'reader' : 'github');
   const prepared = mount(found, file);
+  showSwitch(found);
   if (view === 'reader') show(prepared);
-  else showLauncher(found);
 }
 
 function watch() {

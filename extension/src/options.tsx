@@ -48,7 +48,7 @@ function Options() {
       <section className="options-row">
         <div>
           <h2>Open docs folders in the reader at once</h2>
-          <p>Off (the default): GitHub's own view stays, with an Open in Docs button in the corner. The docs are read in the background, so the button opens them straight away.</p>
+          <p>Off (the default): GitHub's own view stays, and the GitHub | Docs switch in the corner opens the reader. The docs are read in the background, so it opens straight away.</p>
         </div>
         <SegmentedControl aria-label="Open docs folders in the reader at once" value={settings.autoOpen ? 'on' : 'off'} onValueChange={(value) => save({ autoOpen: value === 'on' }, value === 'on' ? 'Docs folders open in the reader.' : 'GitHub’s view stays until you open the reader.')}>
           <SegmentedControlOption value="on">On</SegmentedControlOption>
