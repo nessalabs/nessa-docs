@@ -36,9 +36,7 @@ export type Answer =
 /** Reader → content script, no answer. */
 export type ReaderEvent =
   /** The reader shows this page file now (null: a page with no file, like Settings). */
-  | { readonly type: 'route'; readonly file: string | null }
-  /** The person asked for GitHub's own view. */
-  | { readonly type: 'show-github' };
+  | { readonly type: 'route'; readonly file: string | null };
 
 /** Content script → reader: the address bar moved to another page of the same docs. */
 export interface OpenFile {

@@ -1,15 +1,21 @@
 /* The extension's own pieces of the reader page; everything else is src/styles.css. */
 
 .ext-status {
-  display: grid;
-  grid-template-columns: auto auto;
-  place-content: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   height: 100vh;
   height: 100dvh;
   font-size: 20px;
 }
+.ext-brand {
+  display: inline-flex;
+  gap: 6px;
+  align-items: baseline;
+  letter-spacing: -0.03em;
+}
 .ext-status p {
-  grid-column: 1 / -1;
   margin: 10px 0 0;
   color: var(--muted);
   font-size: var(--text-ui);
@@ -23,27 +29,4 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .ext-status[aria-busy='true'] p { animation: none; }
-}
-
-button.row {
-  width: 100%;
-  border: 0;
-  background: none;
-  font: inherit;
-  font-size: var(--text-ui);
-  text-align: left;
-  cursor: pointer;
-}
-button.row:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: -2px;
-}
-.ext-ref {
-  max-width: 45%;
-  overflow: hidden;
-  color: var(--faint);
-  font-family: var(--mono);
-  font-size: var(--text-caption);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }

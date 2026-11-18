@@ -5,7 +5,6 @@
 
 import { StrictMode, useEffect, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Github } from 'lucide-react';
 import '@fontsource-variable/geist';
 import '@fontsource-variable/geist-mono';
 import '../../src/styles.css';
@@ -20,6 +19,7 @@ import { portClient, type RepoPort } from './port-client';
 import { READY, type OpenFile, type ReaderInit } from './protocol';
 import { githubProject, PROJECT_ID } from './project-source';
 import { repoFiles } from './repo-files';
+import { cachedPort, indexedDbStore } from './file-cache';
 
 const GITHUB_ORIGIN = 'https://github.com';
 applyAppearance(readAppearance());
@@ -29,7 +29,7 @@ const reactRoot = createRoot(container);
 showStatus('Reading docs/state from GitHub…');
 
 function showStatus(message: string, failed = false) {
-  reactRoot.render(<div className="ext-status" role={failed ? 'alert' : 'status'} aria-busy={failed ? undefined : true}><span className="brand-name">nessa</span><span className="brand-product">Docs</span><p>{message}</p></div>);
+  reactRoot.render(<div className="ext-status" role={failed ? 'alert' : 'status'} aria-busy={failed ? undefined : true}><span className="ext-brand"><span className="brand-name">nessa</span><span className="brand-product">Docs</span></span><p>{message}</p></div>);
 }
 
 function idForFile(catalog: Catalog, file: string | null): string | null {
@@ -57,14 +57,7 @@ function Reader({ root, catalog, port, source }: { root: DocsRoot; catalog: Cata
   const host = useMemo<ReaderHost>(() => ({
     localProject: false,
     repoFileHref: (path, fragment) => githubUrl(root, `${root.prefix}${path}`, 'blob', fragment),
-    sidebarFooter: (
-      <button type="button" className="row ext-github-view" onClick={() => port.tell({ type: 'show-github' })} title={`${root.owner}/${root.repo} at ${root.ref}`}>
-        <span className="row-icon" aria-hidden="true"><Github /></span>
-        <span className="row-label">GitHub view</span>
-        <span className="ext-ref">{root.ref}</span>
-      </button>
-    ),
-  }), [root, port]);
+  }), [root]);
   return (
     <ReaderHostContext.Provider value={host}>
       <App source={source} />
@@ -87,7 +80,9 @@ async function start(init: ReaderInit, messagePort: MessagePort) {
     if (window.location.pathname !== to) navigate(to);
   });
   const { root } = init;
-  const project = githubProject(repoFiles(port, root.prefix), `${root.owner}/${root.repo}`);
+  // Files read before at this commit come from this browser, not GitHub.
+  const files = cachedPort(port, root, await indexedDbStore());
+  const project = githubProject(repoFiles(files, root.prefix), `${root.owner}/${root.repo}`);
   try {
     catalog = await project.catalog();
   } catch (error) {

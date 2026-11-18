@@ -4,9 +4,12 @@
 // the run needs no network and no account. Chromium only: Playwright cannot load
 // extensions into Firefox or WebKit.
 //
-// What it checks: a docs folder opens in the reader; a page's own address opens
+// What it checks: a docs folder keeps GitHub's view and shows the GitHub | Docs
+// switch while the reader prepares out of sight; Docs opens it, and the switch
+// stays above the reader;
+// files read once come from this browser the next time; a page's own address opens
 // that page; moving in the reader moves GitHub's address; repository evidence
-// links to GitHub; "GitHub view" takes the cover off and the corner button puts
+// links to GitHub; GitHub on the switch takes the cover off and Docs puts
 // it back; moving out of the folder (GitHub's own soft navigation) removes it;
 // a docs/state folder without README.md, or a repository without one, is left alone.
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
@@ -86,10 +89,20 @@ export async function runExtension() {
     const reader = async () => (await page.waitForSelector('#nessa-docs-overlay iframe', { timeout: 15000 })).contentFrame();
     const title = (frame) => frame.locator('.page h1').first().innerText({ timeout: 15000 });
 
-    // A docs folder opens in the reader, on the overview.
+    // A docs folder keeps GitHub's view, with a button, while the reader prepares behind it.
     await page.goto(`${BASE}/tree/${BRANCH}/docs/state`);
+    await page.waitForSelector('#nessa-docs-switch', { timeout: 15000 });
+    const hidden = await page.waitForSelector('#nessa-docs-overlay.nessa-docs-preparing iframe', { state: 'attached', timeout: 15000 });
+    const pressed = () => page.locator('#nessa-docs-switch button[aria-pressed="true"]').getAttribute('data-view');
+    c.check("GitHub's view stays, with the switch on GitHub", (await page.locator('#github-view').isVisible()) && !(await page.evaluate(() => document.documentElement.classList.contains('nessa-docs-open'))) && (await pressed()) === 'github');
+    await (await hidden.contentFrame()).waitForSelector('.page h1', { state: 'attached', timeout: 15000 });
+    c.check('the reader prepares out of sight', true);
+    await page.locator('#nessa-docs-switch button[data-view="reader"]').click();
     let frame = await reader();
-    c.check('the folder opens on the overview', (await title(frame)) === 'Example store');
+    c.check('Docs on the switch opens the overview', (await title(frame)) === 'Example store');
+    c.check('the switch stays above the reader', (await page.locator('#nessa-docs-switch').isVisible()) && (await pressed()) === 'reader'
+      && (await page.evaluate(() => { const box = document.getElementById('nessa-docs-switch').getBoundingClientRect(); return document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)?.closest('#nessa-docs-switch') !== null; })));
+    await page.screenshot({ path: join(SCREENSHOTS, 'extension-switch-docs.png') });
     c.check('the reader covers the page', await page.evaluate(() => document.documentElement.classList.contains('nessa-docs-open')));
     await page.screenshot({ path: join(SCREENSHOTS, 'extension-overview.png') });
 
@@ -116,25 +129,36 @@ export async function runExtension() {
     c.check('settings drop project and rule checker', !groups.includes('Project') && !groups.includes('Rule checker'), { groups });
     await frame.locator('a.brand').click();
 
-    // GitHub view takes the cover off; the corner button puts it back on the same page.
+    // GitHub on the switch takes the cover off; Docs puts it back on the same page.
     await frame.locator('.sidebar a.row', { hasText: 'Submit or cancel an order' }).click();
     await page.waitForFunction(() => location.pathname.endsWith('order-lifecycle.md'));
-    await frame.locator('button.ext-github-view').click();
-    await page.waitForSelector('#nessa-docs-launcher', { timeout: 15000 });
-    c.check('GitHub view shows GitHub', (await page.locator('#nessa-docs-overlay').count()) === 0 && (await page.locator('#github-view').count()) === 1);
+    await page.locator('#nessa-docs-switch button[data-view="github"]').click();
+    await page.waitForFunction(() => document.querySelector('#nessa-docs-switch button[aria-pressed="true"]')?.getAttribute('data-view') === 'github', null, { timeout: 15000 });
+    const covered = () => page.evaluate(() => { const overlay = document.getElementById('nessa-docs-overlay'); return overlay !== null && !overlay.classList.contains('nessa-docs-preparing'); });
+    c.check('GitHub view shows GitHub', !(await covered()) && (await page.locator('#github-view').count()) === 1);
     c.check('GitHub view draws the address it names', (await page.locator('body').innerText()).includes('docs/state/order-lifecycle.md'));
     await page.screenshot({ path: join(SCREENSHOTS, 'extension-github-view.png') });
     await page.reload();
-    await page.waitForSelector('#nessa-docs-launcher', { timeout: 15000 });
-    c.check('the choice lasts for the tab', (await page.locator('#nessa-docs-overlay').count()) === 0);
-    await page.locator('#nessa-docs-launcher').click();
+    await page.waitForSelector('#nessa-docs-switch', { timeout: 15000 });
+    c.check('the choice lasts for the tab', !(await covered()) && (await pressed()) === 'github');
+    await page.locator('#nessa-docs-switch button[data-view="reader"]').click();
     frame = await reader();
-    c.check('the button reopens the same page', (await title(frame)) === 'Submit or cancel an order');
+    c.check('Docs reopens the same page', (await title(frame)) === 'Submit or cancel an order');
+
+    // Files read before at this commit come from this browser: a reload asks GitHub for no file text.
+    const fileReads = [];
+    const countReads = (request) => { if (request.method() === 'GET' && new URL(request.url()).hostname === 'raw.githubusercontent.com') fileReads.push(request.url()); };
+    context.on('request', countReads);
+    await page.reload();
+    frame = await reader();
+    const reloaded = await title(frame);
+    context.off('request', countReads);
+    c.check('a second visit reads no file from GitHub', reloaded === 'Submit or cancel an order' && fileReads.length === 0, { fileReads: fileReads.length });
 
     // GitHub's own soft navigation out of the folder removes the reader, and back in restores it.
     await page.evaluate((to) => history.pushState({}, '', to), `/${OWNER}/${REPO}/tree/${BRANCH}/src`);
     await page.waitForFunction(() => !document.getElementById('nessa-docs-overlay'));
-    c.check('leaving the folder removes the reader and its button', (await page.locator('#nessa-docs-launcher').count()) === 0);
+    c.check('leaving the folder removes the reader and the switch', (await page.locator('#nessa-docs-switch').count()) === 0);
 
     // A docs/state folder with no README is not a Nessa Docs folder.
     await page.goto(`${BASE}/tree/${BRANCH}/docs/state/services`);
@@ -142,12 +166,12 @@ export async function runExtension() {
     c.check('a subfolder of a docs folder still opens the reader', frame !== null);
     await page.goto(`https://github.com/${OWNER}/other/tree/main/docs/state`);
     await page.waitForTimeout(1500);
-    c.check('a repository without one is left alone', (await page.locator('#nessa-docs-overlay, #nessa-docs-launcher').count()) === 0);
+    c.check('a repository without one is left alone', (await page.locator('#nessa-docs-overlay, #nessa-docs-switch').count()) === 0);
     const bareListing = page.waitForResponse((response) => response.url().endsWith(`/${OWNER}/bare/tree/main/docs/state`) && response.request().headers().accept?.includes('application/json'));
     await page.goto(`https://github.com/${OWNER}/bare/tree/main/docs/state`);
     await bareListing;
     await page.waitForTimeout(1500);
-    c.check('a docs/state folder without README.md is left alone', (await page.locator('#nessa-docs-overlay, #nessa-docs-launcher').count()) === 0);
+    c.check('a docs/state folder without README.md is left alone', (await page.locator('#nessa-docs-overlay, #nessa-docs-switch').count()) === 0);
 
     c.check('no page errors', pageErrors.length === 0, { pageErrors });
   } finally {

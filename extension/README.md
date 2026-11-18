@@ -45,24 +45,36 @@ Load `dist/extension/chrome` with **Load unpacked**, or `dist/extension/firefox/
 
 | Piece | What it does |
 | --- | --- |
-| `src/content.ts` | Content script on github.com. Watches the address (GitHub moves between pages without reloading), finds a `docs/state` folder that has a `README.md`, and covers GitHub's view with the reader in an iframe. Keeps the address on the page the reader shows, so links and reloads open the same page. |
+| `src/content.ts` | Content script on github.com. Watches the address (GitHub moves between pages without reloading), finds a `docs/state` folder that has a `README.md`, starts the reader out of sight in an iframe, and shows a GitHub | Docs switch above both views so Docs opens it at once. Keeps the address on the page the reader shows, so links and reloads open the same page. |
 | `src/github-source.ts` | Reads the repository, pinned to one commit. First through the person's github.com session (GitHub's own folder JSON and `/raw/`), so private repositories work for anyone who can see them; public file text comes straight from raw.githubusercontent.com. Falls back to the REST API, with the optional token if one is saved. |
 | `src/protocol.ts`, `src/port-client.ts` | The content script hands the reader a `MessagePort` once; all file requests go over it, out of reach of the GitHub page. |
 | `src/reader.tsx` | The extension page in the iframe. Builds the catalog with the server's own code (`server/catalog.ts`, `server/responses.ts`) over files from GitHub, then draws the local app's `App` through a `ProjectSource` (`src/project-source.ts`). |
 | `src/repo-files.ts` | The catalog's `RepositoryFiles` port over GitHub. |
+| `src/file-cache.ts` | Keeps listings and file text in IndexedDB by commit, so a second visit needs no network. |
 | `src/diagram-reader.ts` | Reads charts with Mermaid in the page, using the same `server/diagram-reading.mjs` the server's worker uses. |
 | `src/shims/` | Browser stand-ins for the few Node modules the catalog imports (`path`, a synchronous SHA-256 for `crypto`, and two that are never reached). |
-| `src/options.tsx` | Options: open folders automatically (on by default) and an optional token. Both stay in this browser (`storage.local`). |
+| `src/options.tsx` | Options: open folders in the reader at once (off by default) and an optional token. Both stay in this browser (`storage.local`). |
 
 The reader says what it can do through `src/host.tsx` (`ReaderHost`): no folder
 opening or rule checker here, and repository evidence links to the file on
 GitHub.
 
-### Switching back to GitHub
+### Switching between GitHub and the reader
 
-**GitHub view** at the foot of the sidebar takes the reader off for that folder
-in this tab; a small **Open in Docs** button in the corner brings it back. Turn
-off automatic opening in the options to always start on GitHub's view.
+A docs folder starts on GitHub's own view. A small **GitHub | Docs** switch sits
+in the bottom-right corner and stays above both views, so either is one click
+away. The reader reads the docs in the background as soon as the folder is
+found, so **Docs** opens it straight away. The choice lasts for that folder in
+this tab. Turn on "Open docs folders in the reader at once" in the options to
+start on the reader.
+
+### Kept in this browser
+
+Everything the reader reads is kept in the extension's own storage, keyed by
+commit, so opening the same docs again reads nothing from GitHub. A file at a
+commit never changes, so a kept copy is never stale; a new commit is read fresh.
+Copies not used for 30 days are dropped. Private repositories' text is kept the
+same way, in this browser only.
 
 ### Private repositories and tokens
 
