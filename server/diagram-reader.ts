@@ -117,7 +117,7 @@ function start(): Worker {
 }
 
 /** The worker's answer, checked at this boundary; null if it is not a reading. */
-function toReading(message: unknown): DiagramReading | null {
+export function toReading(message: unknown): DiagramReading | null {
   if (message === null || typeof message !== 'object') return null;
   const value = message as { kind?: unknown; reason?: unknown; family?: unknown; nodes?: unknown; edges?: unknown; identities?: unknown };
   if (value.kind === 'unsupported') return typeof value.reason === 'string' ? unsupported(value.reason) : null;

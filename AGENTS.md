@@ -27,6 +27,10 @@ for the included store project. For development, run `npm run dev:api` and
   local browser.
 - `server/mcp/`, `shared/mcp*`, and `src/mcp/` own the MCP bundle, protocol,
   and embedded explorer. Memory mode is the default; durable storage is opt-in.
+- `extension/` is the GitHub browser extension. It runs the server's catalog
+  code in the page over files read from GitHub; keep `server/catalog.ts` and
+  what it imports free of Node-only calls beyond the shims in
+  `extension/src/shims/`. Run `npm run verify:extension` when changing it.
 - Work tracking: `skills/nessa-docs/references/lifecycle.json` is the only list
   of work states and events. `server/work.ts` reads and replays records against
   it; the browser only draws the result (`src/work-view.tsx`). A project adds

@@ -16,6 +16,7 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
+    "allowJs": true,
     "types": [
       "node",
       "vite/client"
@@ -31,6 +32,7 @@
     "src",
     "shared",
     "server",
+    "extension",
     "vite.config.ts"
   ]
 }

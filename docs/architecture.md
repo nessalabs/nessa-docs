@@ -31,6 +31,9 @@ program, and pages without a model skip it.
 | `fixtures/` | Controlled projects used to verify supported and refused content |
 | `scripts/development/` | Vite's local proxy adapter, using the server's request-admission rule |
 | `verification/` | Real browser journeys and measurements |
+| `extension/` | The Chrome and Firefox extension: reads a `docs/state` folder on github.com and draws it with the same catalog and reader code. See [its README](../extension/README.md) |
+| `src/host.tsx` | What the page around the reader can do (local app or extension) |
+| `server/diagram-reading.mjs` | Mermaid's reading of one chart, shared by the server's worker and the extension |
 
 Opening a folder creates a project handle. The URL selects that handle and the
 frontend supplies it to its read port. Project state is scoped to that context;

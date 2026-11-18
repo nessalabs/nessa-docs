@@ -113,10 +113,18 @@ function themeVariables(appearance: Appearance) {
   };
 }
 
-/** Mermaid keeps global state, so one render at a time. */
+/**
+ * Mermaid keeps global state, so one use at a time: every render here, and the
+ * browser extension's diagram reader (which builds the catalog in the page).
+ */
+export function withMermaid<T>(task: (mermaid: MermaidApi) => Promise<T>): Promise<T> {
+  const job = queue.then(async () => task(await loadMermaid()));
+  queue = job.catch(() => undefined);
+  return job;
+}
+
 function renderSvg(source: string, appearance: Appearance): Promise<{ svg: string; renderId: string }> {
-  const job = queue.then(async () => {
-    const mermaid = await loadMermaid();
+  return withMermaid(async (mermaid) => {
     mermaid.initialize({
       startOnLoad: false,
       securityLevel: 'strict',
@@ -137,8 +145,6 @@ function renderSvg(source: string, appearance: Appearance): Promise<{ svg: strin
       document.getElementById(`d${renderId}`)?.remove();
     }
   });
-  queue = job.catch(() => undefined);
-  return job;
 }
 
 const renderedDiagrams = new Map<string, { svg: string; renderId: string }>();

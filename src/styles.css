@@ -649,12 +649,15 @@ figure {
   margin-top: auto;
   display: flex;
   flex: none;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
   padding: 6px 8px;
   border-top: 1px solid var(--hairline);
 }
-.settings-link {
-  flex: 1;
+/* Settings, and any row the host adds above it (src/host.tsx). */
+.sidebar-footer > .row {
+  flex: none;
 }
 
 /* ——— Pages ——— */
