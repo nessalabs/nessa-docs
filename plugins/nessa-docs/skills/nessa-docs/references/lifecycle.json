@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "about": "The one lifecycle every Nessa Docs page and task follows. The validator, the reader and the nessa-docs skill all read this file. A project may add requirements to an event in docs/state/nessa-docs.yaml (work.require); it can never add, remove or rename a state or an event.",
+  "start": "draft",
+  "states": {
+    "draft": "Being sketched. Not agreed yet.",
+    "planned": "The chart and its tasks are accepted. Nobody is on it yet.",
+    "working": "Someone is building it.",
+    "blocked": "Waiting on an answer. Always carries the question.",
+    "review": "Built. A PR or diff is waiting for review.",
+    "implemented": "Merged, and the page is stamped with sourceRevision.",
+    "verified": "Implemented, and its rules held at that same commit (modelCheck). Only for pages with a model.",
+    "dropped": "Stopped on purpose. Says why."
+  },
+  "shown": {
+    "stale": "Implemented or verified, but a source file changed after the page's sourceRevision. Worked out by the reader, never written."
+  },
+  "events": {
+    "accept": { "from": ["draft"], "to": "planned", "by": "person" },
+    "start": { "from": ["planned"], "to": "working" },
+    "ask": { "from": ["working"], "to": "blocked", "needs": ["question"] },
+    "answer": { "from": ["blocked"], "to": "working", "by": "person" },
+    "submit": { "from": ["working"], "to": "review", "needs": ["evidence"] },
+    "rework": { "from": ["review"], "to": "working" },
+    "merge": { "from": ["review"], "to": "implemented", "needs": ["commit"] },
+    "verify": { "from": ["implemented"], "to": "verified", "needs": ["modelCheck"] },
+    "reopen": { "from": ["implemented", "verified"], "to": "working" },
+    "drop": { "from": ["draft", "planned", "working", "review"], "to": "dropped", "needs": ["reason"] },
+    "note": { "from": ["draft", "planned", "working", "blocked", "review", "implemented", "verified", "dropped"], "to": null }
+  },
+  "needs": {
+    "question": "The record's body asks the question, with the options and a recommendation.",
+    "reason": "The record's body says why.",
+    "evidence": "At least one evidence entry: a pr, commit, check or diff.",
+    "commit": "An evidence entry naming the full commit id that landed it.",
+    "pr": "An evidence entry naming the pull request.",
+    "check": "An evidence entry naming a passing check.",
+    "modelCheck": "The page has a model whose saved check is fresh, broke nothing, left nothing unchecked, and names the same commit as the page's sourceRevision."
+  }
+}

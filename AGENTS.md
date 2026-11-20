@@ -33,6 +33,12 @@ for the included store project. For development, run `npm run dev:api` and
   `extension/src/shims/`. Run `npm run verify:extension` when changing it, and
   `npm run package:extension` to refresh the committed downloads in
   `extension/downloads/` whenever shipped code changes.
+- `plugins/nessa-docs/` is the Claude plugin, listed by
+  `.claude-plugin/marketplace.json`. Its `skills/` is a copy of `skills/`
+  (a plugin may only load files inside its own folder): edit `skills/`, then
+  run `npm run sync:plugin`; `npm test` fails while the copy differs. Raise
+  `version` in its `plugin.json` and in the marketplace entry together, and
+  check it with `claude plugin validate ./plugins/nessa-docs`.
 - Work tracking: `skills/nessa-docs/references/lifecycle.json` is the only list
   of work states and events. `server/work.ts` reads and replays records against
   it; the browser only draws the result (`src/work-view.tsx`). A project adds
