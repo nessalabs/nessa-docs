@@ -1,0 +1,17 @@
+{
+  "name": "nessa-docs",
+  "owner": { "name": "nessalabs", "url": "https://github.com/nessalabs" },
+  "metadata": {
+    "description": "Nessa Docs for Claude: write and maintain browsable docs/state system maps."
+  },
+  "plugins": [
+    {
+      "name": "nessa-docs",
+      "source": "./plugins/nessa-docs",
+      "description": "Map a project's services, user flows and lifecycles as Markdown statecharts in docs/state, grounded in its source.",
+      "version": "0.1.0",
+      "license": "MIT",
+      "category": "documentation"
+    }
+  ]
+}

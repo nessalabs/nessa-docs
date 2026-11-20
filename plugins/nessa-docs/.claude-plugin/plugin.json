@@ -1,0 +1,11 @@
+{
+  "name": "nessa-docs",
+  "displayName": "Nessa Docs",
+  "version": "0.1.0",
+  "description": "Map a project's services, user flows and lifecycles as Markdown statecharts in docs/state, grounded in its source, and keep them current as the code changes.",
+  "author": { "name": "nessalabs", "url": "https://github.com/nessalabs" },
+  "homepage": "https://github.com/nessalabs/nessa-docs",
+  "repository": "https://github.com/nessalabs/nessa-docs",
+  "license": "MIT",
+  "keywords": ["documentation", "statecharts", "mermaid", "architecture", "state-machines"]
+}

@@ -49,6 +49,20 @@ in this reader, straight from GitHub. Download it for
 or [Firefox](https://github.com/nessalabs/nessa-docs/raw/main/extension/downloads/nessa-docs-firefox.zip);
 install steps are in [extension/README.md](extension/README.md#install).
 
+## Use it in Claude
+
+The Claude plugin bundles the authoring skills with two commands,
+`/nessa-docs:map` and `/nessa-docs:refresh`. In Claude Code:
+
+```text
+/plugin marketplace add nessalabs/nessa-docs
+/plugin install nessa-docs@nessa-docs
+```
+
+Then ask `/nessa-docs:map checkout flow`, or just ask Claude to map a flow.
+The plugin is instructions only; see [its README](plugins/nessa-docs/README.md)
+for what it does and runs.
+
 ## Write docs for your project
 
 Copy the skill into the repository you want to document:
