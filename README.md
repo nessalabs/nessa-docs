@@ -47,7 +47,8 @@ The browser extension shows a repository's `docs/state` folder on github.com
 in this reader, straight from GitHub. Download it for
 [Chrome](https://github.com/nessalabs/nessa-docs/raw/main/extension/downloads/nessa-docs-chrome.zip)
 or [Firefox](https://github.com/nessalabs/nessa-docs/raw/main/extension/downloads/nessa-docs-firefox.zip);
-install steps are in [extension/README.md](extension/README.md#install).
+install steps are in [extension/README.md](extension/README.md#install). It collects no personal data; see the
+[privacy policy](PRIVACY.md).
 
 ## Use it in Claude
 
